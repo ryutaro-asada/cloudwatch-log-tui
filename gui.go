@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
@@ -47,16 +49,17 @@ type gui struct {
 	// logEventFuncs map[string]func()
 }
 type logEventForm struct {
-	startYear   string
-	startMonth  string
-	startDay    string
-	startHour   string
-	startMinute string
-	endYear     string
-	endMonth    string
-	endDay      string
-	endHour     string
-	endMinute   string
+	startYear    int
+	startMonth   time.Month
+	startDay     int
+	startHour    int
+	startMinute  int
+	endYear      int
+	endMonth     time.Month
+	endDay       int
+	endHour      int
+	endMinute    int
+	logGroupName string
 }
 
 func (g *gui) setGui(aw *awsResource) {
@@ -151,7 +154,7 @@ func (g *gui) setLogGroupLayout() {
 
 func (g *gui) setKeybinding(aw *awsResource) {
 	g.setLogGroupKeybinding(aw.logGroups)
-	g.setLogEventKeybinding()
+	g.setLogEventKeybinding(aw)
 }
 
 func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup, filterPatern string) {
@@ -193,6 +196,7 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 		// app.getLogEvents(mtxt)
 		//
 		// log.Println(mtxt)
+		g.lEFrom.logGroupName = mtxt
 		g.pages.SwitchToPage(logEventPage)
 		g.tvApp.SetFocus(g.layouts[logEventLayout])
 		// time.Sleep(3 * time.Second)
@@ -216,7 +220,7 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 	})
 }
 
-func (g *gui) setLogEventKeybinding() {
+func (g *gui) setLogEventKeybinding(aw *awsResource) {
 	dropDowns := []string{
 		startYearDropDown,
 		startMonthDropDown,
@@ -234,7 +238,7 @@ func (g *gui) setLogEventKeybinding() {
 		name := dd
 
 		nowDropdown := g.widgets[name].(*tview.DropDown)
-		
+
 		var nextWidget tview.Primitive
 		if i == len(dropDowns)-1 {
 			nextWidget = g.widgets[saveEventLogButton]
@@ -293,30 +297,47 @@ func (g *gui) setLogEventKeybinding() {
 		log.Println(g.lEFrom.endHour)
 		log.Println(g.lEFrom.endMinute)
 		log.Println("save")
+		aw.getLogEvents(g.lEFrom)
 	})
 }
 
 func (g *gui) inputForm(ddk string, text string) {
 	switch ddk {
 	case startYearDropDown:
-		g.lEFrom.startYear = text
+		g.lEFrom.startYear = string2int(text)
 	case startMonthDropDown:
-		g.lEFrom.startMonth = text
+		g.lEFrom.startMonth = string2month(text)
 	case startDayDropDown:
-		g.lEFrom.startDay = text
+		g.lEFrom.startDay = string2int(text)
 	case startHourDropDown:
-		g.lEFrom.startHour = text
+		g.lEFrom.startHour = string2int(text)
 	case startMinuteDropDown:
-		g.lEFrom.startMinute = text
+		g.lEFrom.startMinute = string2int(text)
 	case endYearDropDown:
-		g.lEFrom.endYear = text
+		g.lEFrom.endYear = string2int(text)
 	case endMonthDropDown:
-		g.lEFrom.endMonth = text
+		g.lEFrom.endMonth = string2month(text)
 	case endDayDropDown:
-		g.lEFrom.endDay = text
+		g.lEFrom.endDay = string2int(text)
 	case endHourDropDown:
-		g.lEFrom.endHour = text
+		g.lEFrom.endHour = string2int(text)
 	case endMinuteDropDown:
-		g.lEFrom.endMinute = text
+		g.lEFrom.endMinute = string2int(text)
 	}
+}
+
+func string2int(s string) int {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		log.Fatalf("unable to list tables, %v", err)
+	}
+	return i
+}
+
+func string2month(s string) time.Month {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		log.Fatalf("unable to list tables, %v", err)
+	}
+	return time.Month(i)
 }
