@@ -1,9 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
-	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,14 +18,15 @@ type awsResource struct {
 	client     *cwl.Client
 }
 
-func (a *awsResource) getLogEvents(lef *logEventForm) {
-	input := &cwl.FilterLogEventsInput{
-		LogGroupName: aws.String(lef.logGroupName),
-		StartTime:    aws.Int64(startTime(lef)),
-		EndTime:      aws.Int64(endTime(lef)),
-	}
+func (a *awsResource) getLogEvents(input logEventInut) {
+	// input := &cwl.FilterLogEventsInput{
+	// 	LogGroupName:  aws.String(lef.logGroupName),
+	// 	StartTime:     aws.Int64(startTime(lef)),
+	// 	EndTime:       aws.Int64(endTime(lef)),
+	// 	FilterPattern: aws.String(lef.filterPatern),
+	// }
 
-	paginator := cwl.NewFilterLogEventsPaginator(a.client, input, func(o *cwl.FilterLogEventsPaginatorOptions) {
+	paginator := cwl.NewFilterLogEventsPaginator(a.client, input.awsInput, func(o *cwl.FilterLogEventsPaginatorOptions) {
 		o.Limit = 10000
 	})
 
@@ -36,10 +38,27 @@ func (a *awsResource) getLogEvents(lef *logEventForm) {
 	}
 
 	// write the log event to the file
-	for _, event := range res.Events {
-		log.Println(aws.ToString(event.Message))
-		_ = event
+	var outputFile string
+	if input.outputFile != "" {
+		outputFile = input.outputFile
+	} else {
+		outputFile = "app.log"
 	}
+	// open the file
+	// write the log event to the file itereatively
+	// close the file
+
+	f, _ := os.Create(outputFile)
+	defer f.Close()
+	bf := bufio.NewWriter(f)
+
+	for _, event := range res.Events {
+		_, _ = bf.WriteString(aws.ToString(event.Message) + "\n")
+
+		// log.Println(aws.ToString(event.Message))
+		// _ = event
+	}
+	bf.Flush()
 }
 
 func (a *awsResource) getLogGroups() {
@@ -59,10 +78,23 @@ func (a *awsResource) getLogGroups() {
 	}
 }
 
-func startTime(lef *logEventForm) int64 {
-	return time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local).UnixMilli()
+func startTime(lef *logEventForm) *int64 {
+	if lef.startTimeSelected {
+		return aws.Int64(time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local).UnixMilli())
+	}
+	return nil
 }
 
-func endTime(lef *logEventForm) int64 {
-	return time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local).UnixMilli()
+func endTime(lef *logEventForm) *int64 {
+	if lef.endTimeSelected {
+		return aws.Int64(time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local).UnixMilli())
+	}
+	return nil
+}
+
+func filterPattern(lef *logEventForm) *string {
+	if lef.enableFilterPatern {
+		return aws.String(lef.filterPatern)
+	}
+	return nil
 }

@@ -23,10 +23,15 @@ func NewApp() *App {
 	}
 	return &App{
 		gui: &gui{
-			tvApp: tview.NewApplication(),
+			tvApp:   tview.NewApplication(),
 			widgets: make(map[string]tview.Primitive),
 			layouts: make(map[string]*tview.Flex),
-			lEFrom: &logEventForm{},
+			lEFrom: &logEventForm{
+				startTimeSelected:  false,
+				endTimeSelected:    false,
+				enableFilterPatern: false,
+				enableOutputFile:   false,
+			},
 		},
 		awsr: &awsResource{
 			client: cwl.NewFromConfig(cfg),

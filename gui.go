@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -35,6 +36,8 @@ const (
 	endDayDropDown      = "EndDay"
 	endHourDropDown     = "EndHour"
 	endMinuteDropDown   = "EndMinute"
+	filterPaternInput   = "FilterPatern"
+	outputFileInput     = "OutputFile"
 	saveEventLogButton  = "SaveEventLog"
 )
 
@@ -49,17 +52,28 @@ type gui struct {
 	// logEventFuncs map[string]func()
 }
 type logEventForm struct {
-	startYear    int
-	startMonth   time.Month
-	startDay     int
-	startHour    int
-	startMinute  int
-	endYear      int
-	endMonth     time.Month
-	endDay       int
-	endHour      int
-	endMinute    int
-	logGroupName string
+	startTimeSelected  bool
+	startYear          int
+	startMonth         time.Month
+	startDay           int
+	startHour          int
+	startMinute        int
+	endTimeSelected    bool
+	endYear            int
+	endMonth           time.Month
+	endDay             int
+	endHour            int
+	endMinute          int
+	logGroupName       string
+	filterPatern       string
+	enableFilterPatern bool
+	outputFile         string
+	enableOutputFile   bool
+}
+
+type logEventInut struct {
+	awsInput   *cwl.FilterLogEventsInput
+	outputFile string
 }
 
 func (g *gui) setGui(aw *awsResource) {
@@ -114,6 +128,9 @@ func (g *gui) setLogEventLayout() {
 
 		g.widgets[key] = DropDown
 	}
+	g.widgets[filterPaternInput] = tview.NewInputField().SetLabel("Filter Pattern")
+
+	g.widgets[outputFileInput] = tview.NewInputField().SetLabel("Output File")
 
 	g.widgets[saveEventLogButton] = tview.NewButton("Save")
 
@@ -130,7 +147,10 @@ func (g *gui) setLogEventLayout() {
 			AddItem(g.widgets[endDayDropDown], 0, 1, false).
 			AddItem(g.widgets[endHourDropDown], 0, 1, false).
 			AddItem(g.widgets[endMinuteDropDown], 0, 1, false), 0, 10, false).
-		AddItem(g.widgets[saveEventLogButton], 0, 1, false)
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[filterPaternInput], 0, 1, false).
+			AddItem(g.widgets[outputFileInput], 0, 1, false).
+			AddItem(g.widgets[saveEventLogButton], 0, 1, false), 0, 1, false)
 }
 
 func (g *gui) setLogGroupLayout() {
@@ -220,30 +240,39 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 	})
 }
 
-func (g *gui) setLogEventKeybinding(aw *awsResource) {
-	dropDowns := []string{
+func startDropDowns() []string {
+	return []string{
 		startYearDropDown,
 		startMonthDropDown,
 		startDayDropDown,
 		startHourDropDown,
 		startMinuteDropDown,
+	}
+}
+
+func endDropDowns() []string {
+	return []string{
 		endYearDropDown,
 		endMonthDropDown,
 		endDayDropDown,
 		endHourDropDown,
 		endMinuteDropDown,
 	}
+}
 
-	for i, dd := range dropDowns {
+func (g *gui) setLogEventKeybinding(aw *awsResource) {
+	dds := append(startDropDowns(), endDropDowns()...)
+
+	for i, dd := range dds {
 		name := dd
 
 		nowDropdown := g.widgets[name].(*tview.DropDown)
 
 		var nextWidget tview.Primitive
-		if i == len(dropDowns)-1 {
-			nextWidget = g.widgets[saveEventLogButton]
+		if i == len(dds)-1 {
+			nextWidget = g.widgets[filterPaternInput]
 		} else {
-			nextWidget = g.widgets[dropDowns[(i+1)%len(dropDowns)]]
+			nextWidget = g.widgets[dds[(i+1)%len(dds)]]
 		}
 		nowDropdown.
 			SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -269,6 +298,26 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		nowDropdown.SetSelectedFunc(func(text string, index int) {
 			g.inputForm(name, text)
 		})
+
+		g.widgets[filterPaternInput].(*tview.InputField).
+			SetDoneFunc(func(key tcell.Key) {
+				if key == tcell.KeyTab {
+					g.tvApp.SetFocus(g.widgets[outputFileInput])
+				}
+			}).
+			SetChangedFunc(func(text string) {
+				g.lEFrom.filterPatern = text
+			})
+
+		g.widgets[outputFileInput].(*tview.InputField).
+			SetDoneFunc(func(key tcell.Key) {
+				if key == tcell.KeyTab {
+					g.tvApp.SetFocus(g.widgets[saveEventLogButton])
+				}
+			}).
+			SetChangedFunc(func(text string) {
+				g.lEFrom.outputFile = text
+			})
 
 		// if event.Key() == tcell.KeyEsc {
 		// 	g.tvApp.SetFocus(g.widgets[logGroupList])
@@ -297,9 +346,83 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		log.Println(g.lEFrom.endHour)
 		log.Println(g.lEFrom.endMinute)
 		log.Println("save")
-		aw.getLogEvents(g.lEFrom)
+		result := g.makeFormResult()
+		aw.getLogEvents(result)
 	})
 }
+
+func (g *gui) makeFormResult() logEventInut {
+	lef := g.lEFrom
+	for di, dd := range startDropDowns() {
+		nowDropdown := g.widgets[dd].(*tview.DropDown)
+		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
+			break
+		}
+		if di == len(startDropDowns())-1 {
+			lef.startTimeSelected = true
+		}
+	}
+
+	for di, dd := range endDropDowns() {
+		nowDropdown := g.widgets[dd].(*tview.DropDown)
+		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
+			break
+		}
+		if di == len(endDropDowns())-1 {
+			lef.endTimeSelected = true
+		}
+	}
+
+	if lef.startTimeSelected && lef.endTimeSelected {
+		startTime := time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local)
+		endTime := time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local)
+		if startTime.After(endTime) {
+			log.Fatalf("start time is after end time")
+		}
+	}
+
+	if lef.logGroupName == "" {
+		log.Fatalf("log group name is empty")
+	}
+	if lef.filterPatern != "" {
+		lef.enableFilterPatern = true
+	}
+	if lef.outputFile != "" {
+		lef.enableOutputFile = true
+	}
+	return logEventInut{
+		awsInput: &cwl.FilterLogEventsInput{
+			LogGroupName:  aws.String(lef.logGroupName),
+			StartTime:     startTime(lef),
+			EndTime:       endTime(lef),
+			FilterPattern: filterPattern(lef),
+		},
+		outputFile: lef.outputFile,
+	}
+}
+
+// func (g *gui) logEventInput(lef *logEventForm) *cwl.FilterLogEventsInput {
+// 	if lef.startTimeSelected && lef.endTimeSelected && lef.enableFilterPatern {
+// 		return &cwl.FilterLogEventsInput{
+// 			LogGroupName:  aws.String(lef.logGroupName),
+// 			StartTime:     aws.Int64(startTime(lef)),
+// 			EndTime:       aws.Int64(endTime(lef)),
+// 			FilterPattern: aws.String(lef.filterPatern),
+// 		}
+// 	} else if lef.startTimeSelected && lef.endTimeSelected && !lef.enableFilterPatern {
+// 		return &cwl.FilterLogEventsInput{
+// 			LogGroupName:  aws.String(lef.logGroupName),
+// 			StartTime:     aws.Int64(startTime(lef)),
+// 			EndTime:       aws.Int64(endTime(lef)),
+// 		}
+// 	} else if lef.startTimeSelected && lef.endTimeSelected && !lef.enableFilterPatern {
+// 		return &cwl.FilterLogEventsInput{
+// 			LogGroupName:  aws.String(lef.logGroupName),
+// 			StartTime:     aws.Int64(startTime(lef)),
+// 			EndTime:       aws.Int64(endTime(lef)),
+// 		}
+// 	}
+// }
 
 func (g *gui) inputForm(ddk string, text string) {
 	switch ddk {
