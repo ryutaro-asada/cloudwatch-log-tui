@@ -30,35 +30,33 @@ func (a *awsResource) getLogEvents(input logEventInut) {
 		o.Limit = 10000
 	})
 
-	// for paginator.HasMorePages() {
-	paginator.HasMorePages()
-	res, err := paginator.NextPage(context.TODO())
-	if err != nil {
-		log.Fatalf("unable to list tables, %v", err)
-	}
-
-	// write the log event to the file
 	var outputFile string
 	if input.outputFile != "" {
 		outputFile = input.outputFile
 	} else {
 		outputFile = "app.log"
 	}
-	// open the file
-	// write the log event to the file itereatively
-	// close the file
-
-	f, _ := os.Create(outputFile)
+	f, err := os.Create(outputFile)
+	if err != nil {
+		log.Fatalf("unable to create file, %v", err)
+	}
 	defer f.Close()
 	bf := bufio.NewWriter(f)
+	defer bf.Flush()
 
-	for _, event := range res.Events {
-		_, _ = bf.WriteString(aws.ToString(event.Message) + "\n")
+	for paginator.HasMorePages() {
+		res, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			log.Fatalf("unable to get next page, %v", err)
+		}
 
-		// log.Println(aws.ToString(event.Message))
-		// _ = event
+		for _, event := range res.Events {
+			_, err = bf.WriteString(aws.ToString(event.Message) + "\n")
+			if err != nil {
+				log.Fatalf("unable to write to file, %v", err)
+			}
+		}
 	}
-	bf.Flush()
 }
 
 func (a *awsResource) getLogGroups() {

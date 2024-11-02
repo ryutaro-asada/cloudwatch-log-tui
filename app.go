@@ -24,8 +24,8 @@ func NewApp() *App {
 	return &App{
 		gui: &gui{
 			tvApp:   tview.NewApplication(),
-			widgets: make(map[string]tview.Primitive),
-			layouts: make(map[string]*tview.Flex),
+			widgets: make(map[Widget]tview.Primitive),
+			layouts: make(map[Layout]*tview.Flex),
 			lEFrom: &logEventForm{
 				startTimeSelected:  false,
 				endTimeSelected:    false,
@@ -42,7 +42,7 @@ func NewApp() *App {
 func (a *App) Run() {
 	if err := a.gui.tvApp.SetRoot(a.gui.pages, true).
 		EnableMouse(true).
-		SetFocus(a.gui.widgets[logGroupList]).
+		SetFocus(a.gui.widgets[LogGroupList]).
 		Run(); err != nil {
 		panic(err)
 	}

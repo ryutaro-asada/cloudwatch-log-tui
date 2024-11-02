@@ -14,38 +14,75 @@ import (
 	"github.com/rivo/tview"
 )
 
+type (
+	Page   int
+	Layout int
+	Widget int
+)
+
 const (
-	noShortcut rune = 0
+	NoShortcut rune = 0
 
 	// Page names
-	logGroupPage = "logGroups"
-	logEventPage = "logEvents"
+	LogGroupPage Page = iota
+	LogEventPage
+
 	// Layout names
-	logGroupLayout = "LogGroup"
-	logEventLayout = "LogEvent"
+	LogGroupLayout Layout = iota
+	LogEventLayout
+
 	// Widget names
-	logGroupList        = "LogGroupeList"
-	logGroupSearch      = "LogGroupSearch"
-	startYearDropDown   = "StartYear"
-	startMonthDropDown  = "StartMonth"
-	startDayDropDown    = "StartDay"
-	startHourDropDown   = "StartHour"
-	startMinuteDropDown = "StartMinute"
-	endYearDropDown     = "EndYear"
-	endMonthDropDown    = "EndMonth"
-	endDayDropDown      = "EndDay"
-	endHourDropDown     = "EndHour"
-	endMinuteDropDown   = "EndMinute"
-	filterPaternInput   = "FilterPatern"
-	outputFileInput     = "OutputFile"
-	saveEventLogButton  = "SaveEventLog"
+	LogGroupList Widget = iota
+	LogGroupSearch
+	StartYearDropDown
+	StartMonthDropDown
+	StartDayDropDown
+	StartHourDropDown
+	StartMinuteDropDown
+	EndYearDropDown
+	EndMonthDropDown
+	EndDayDropDown
+	EndHourDropDown
+	EndMinuteDropDown
+	FilterPaternInput
+	OutputFileInput
+	SaveEventLogButton
 )
+
+// Create a map to hold the string representations of the enums
+var pageNames = map[Page]string{
+	LogGroupPage: "logGroups",
+	LogEventPage: "logEvents",
+}
+
+var layoutNames = map[Layout]string{
+	LogGroupLayout: "LogGroup",
+	LogEventLayout: "LogEvent",
+}
+
+var widgetNames = map[Widget]string{
+	LogGroupList:        "LogGroupeList",
+	LogGroupSearch:      "LogGroupSearch",
+	StartYearDropDown:   "StartYear",
+	StartMonthDropDown:  "StartMonth",
+	StartDayDropDown:    "StartDay",
+	StartHourDropDown:   "StartHour",
+	StartMinuteDropDown: "StartMinute",
+	EndYearDropDown:     "EndYear",
+	EndMonthDropDown:    "EndMonth",
+	EndDayDropDown:      "EndDay",
+	EndHourDropDown:     "EndHour",
+	EndMinuteDropDown:   "EndMinute",
+	FilterPaternInput:   "FilterPatern",
+	OutputFileInput:     "OutputFile",
+	SaveEventLogButton:  "SaveEventLog",
+}
 
 type gui struct {
 	tvApp   *tview.Application
 	pages   *tview.Pages
-	layouts map[string]*tview.Flex
-	widgets map[string]tview.Primitive
+	layouts map[Layout]*tview.Flex
+	widgets map[Widget]tview.Primitive
 	lEFrom  *logEventForm
 
 	// logGroupFuncs map[string]func()
@@ -80,8 +117,8 @@ func (g *gui) setGui(aw *awsResource) {
 	g.setLogGroupLayout()
 	g.setLogEventLayout()
 	g.pages = tview.NewPages().
-		AddPage(logGroupPage, g.layouts[logGroupLayout], true, true).
-		AddPage(logEventPage, g.layouts[logEventLayout], true, false)
+		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
+		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
 
 	g.setLogGroupToGui(aw.logGroups, "*")
 	g.setKeybinding(aw)
@@ -107,57 +144,57 @@ func (g *gui) setLogEventLayout() {
 		minutes = append(minutes, fmt.Sprintf("%d", i))
 	}
 
-	formMap := map[string][]string{
-		startYearDropDown:   {"2024", "2025"},
-		startMonthDropDown:  months,
-		startDayDropDown:    days,
-		startHourDropDown:   hours,
-		startMinuteDropDown: minutes,
-		endYearDropDown:     {"2024", "2025"},
-		endMonthDropDown:    months,
-		endDayDropDown:      days,
-		endHourDropDown:     hours,
-		endMinuteDropDown:   minutes,
+	formMap := map[Widget][]string{
+		StartYearDropDown:   {"2024", "2025"},
+		StartMonthDropDown:  months,
+		StartDayDropDown:    days,
+		StartHourDropDown:   hours,
+		StartMinuteDropDown: minutes,
+		EndYearDropDown:     {"2024", "2025"},
+		EndMonthDropDown:    months,
+		EndDayDropDown:      days,
+		EndHourDropDown:     hours,
+		EndMinuteDropDown:   minutes,
 	}
 
 	for key, value := range formMap {
 		DropDown := tview.NewDropDown().
-			SetLabel(key).
+			SetLabel(widgetNames[key]).
 			SetOptions(value, nil).
 			SetFieldBackgroundColor(tcell.ColorGray)
 
 		g.widgets[key] = DropDown
 	}
-	g.widgets[filterPaternInput] = tview.NewInputField().SetLabel("Filter Pattern")
+	g.widgets[FilterPaternInput] = tview.NewInputField().SetLabel("Filter Pattern")
 
-	g.widgets[outputFileInput] = tview.NewInputField().SetLabel("Output File")
+	g.widgets[OutputFileInput] = tview.NewInputField().SetLabel("Output File")
 
-	g.widgets[saveEventLogButton] = tview.NewButton("Save")
+	g.widgets[SaveEventLogButton] = tview.NewButton("Save")
 
-	g.layouts[logEventLayout] = tview.NewFlex().
+	g.layouts[LogEventLayout] = tview.NewFlex().
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[startYearDropDown], 0, 1, true).
-			AddItem(g.widgets[startMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[startDayDropDown], 0, 1, false).
-			AddItem(g.widgets[startHourDropDown], 0, 1, false).
-			AddItem(g.widgets[startMinuteDropDown], 0, 1, false), 0, 10, true).
+			AddItem(g.widgets[StartYearDropDown], 0, 1, true).
+			AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
+			AddItem(g.widgets[StartDayDropDown], 0, 1, false).
+			AddItem(g.widgets[StartHourDropDown], 0, 1, false).
+			AddItem(g.widgets[StartMinuteDropDown], 0, 1, false), 0, 10, true).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[endYearDropDown], 0, 1, false).
-			AddItem(g.widgets[endMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[endDayDropDown], 0, 1, false).
-			AddItem(g.widgets[endHourDropDown], 0, 1, false).
-			AddItem(g.widgets[endMinuteDropDown], 0, 1, false), 0, 10, false).
+			AddItem(g.widgets[EndYearDropDown], 0, 1, false).
+			AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
+			AddItem(g.widgets[EndDayDropDown], 0, 1, false).
+			AddItem(g.widgets[EndHourDropDown], 0, 1, false).
+			AddItem(g.widgets[EndMinuteDropDown], 0, 1, false), 0, 10, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[filterPaternInput], 0, 1, false).
-			AddItem(g.widgets[outputFileInput], 0, 1, false).
-			AddItem(g.widgets[saveEventLogButton], 0, 1, false), 0, 1, false)
+			AddItem(g.widgets[FilterPaternInput], 0, 1, false).
+			AddItem(g.widgets[OutputFileInput], 0, 1, false).
+			AddItem(g.widgets[SaveEventLogButton], 0, 1, false), 0, 1, false)
 }
 
 func (g *gui) setLogGroupLayout() {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetBorder(true)
 	list.SetTitle("Log Groups")
-	g.widgets[logGroupList] = list
+	g.widgets[LogGroupList] = list
 
 	search := tview.NewInputField().SetLabel("Word")
 	search.SetLabelWidth(6)
@@ -165,11 +202,11 @@ func (g *gui) setLogGroupLayout() {
 	search.SetTitleAlign(tview.AlignLeft)
 	search.SetBorder(true)
 	search.SetFieldBackgroundColor(tcell.ColorGray)
-	g.widgets[logGroupSearch] = search
+	g.widgets[LogGroupSearch] = search
 
-	g.layouts[logGroupLayout] = tview.NewFlex().
-		AddItem(g.widgets[logGroupList], 0, 30, false).SetDirection(tview.FlexRow).
-		AddItem(g.widgets[logGroupSearch], 0, 1, false)
+	g.layouts[LogGroupLayout] = tview.NewFlex().
+		AddItem(g.widgets[LogGroupList], 0, 30, false).SetDirection(tview.FlexRow).
+		AddItem(g.widgets[LogGroupSearch], 0, 1, false)
 }
 
 func (g *gui) setKeybinding(aw *awsResource) {
@@ -186,14 +223,14 @@ func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup, filterPatern string) {
 			}
 		}
 
-		lgList := g.widgets[logGroupList].(*tview.List)
-		lgList.AddItem(aws.ToString(lg.LogGroupName), "", noShortcut, nil)
+		lgList := g.widgets[LogGroupList].(*tview.List)
+		lgList.AddItem(aws.ToString(lg.LogGroupName), "", NoShortcut, nil)
 	}
 }
 
 func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
-	lgList := g.widgets[logGroupList].(*tview.List)
-	lgSearch := g.widgets[logGroupSearch].(*tview.InputField)
+	lgList := g.widgets[LogGroupList].(*tview.List)
+	lgSearch := g.widgets[LogGroupSearch].(*tview.InputField)
 
 	lgList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		max := lgList.GetItemCount()
@@ -217,8 +254,8 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 		//
 		// log.Println(mtxt)
 		g.lEFrom.logGroupName = mtxt
-		g.pages.SwitchToPage(logEventPage)
-		g.tvApp.SetFocus(g.layouts[logEventLayout])
+		g.pages.SwitchToPage(pageNames[LogEventPage])
+		g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 		// time.Sleep(3 * time.Second)
 		// filterLogEventForm.Clear(false)
 	})
@@ -240,23 +277,23 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 	})
 }
 
-func startDropDowns() []string {
-	return []string{
-		startYearDropDown,
-		startMonthDropDown,
-		startDayDropDown,
-		startHourDropDown,
-		startMinuteDropDown,
+func startDropDowns() []Widget {
+	return []Widget{
+		StartYearDropDown,
+		StartMonthDropDown,
+		StartDayDropDown,
+		StartHourDropDown,
+		StartMinuteDropDown,
 	}
 }
 
-func endDropDowns() []string {
-	return []string{
-		endYearDropDown,
-		endMonthDropDown,
-		endDayDropDown,
-		endHourDropDown,
-		endMinuteDropDown,
+func endDropDowns() []Widget {
+	return []Widget{
+		EndYearDropDown,
+		EndMonthDropDown,
+		EndDayDropDown,
+		EndHourDropDown,
+		EndMinuteDropDown,
 	}
 }
 
@@ -270,7 +307,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 
 		var nextWidget tview.Primitive
 		if i == len(dds)-1 {
-			nextWidget = g.widgets[filterPaternInput]
+			nextWidget = g.widgets[FilterPaternInput]
 		} else {
 			nextWidget = g.widgets[dds[(i+1)%len(dds)]]
 		}
@@ -288,7 +325,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 					return event
 				}
 				if event.Key() == tcell.KeyEsc {
-					g.tvApp.SetFocus(g.widgets[logGroupList])
+					g.tvApp.SetFocus(g.widgets[LogGroupList])
 				} else if event.Key() == tcell.KeyTab {
 					g.tvApp.SetFocus(nextWidget)
 				}
@@ -299,20 +336,20 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 			g.inputForm(name, text)
 		})
 
-		g.widgets[filterPaternInput].(*tview.InputField).
+		g.widgets[FilterPaternInput].(*tview.InputField).
 			SetDoneFunc(func(key tcell.Key) {
 				if key == tcell.KeyTab {
-					g.tvApp.SetFocus(g.widgets[outputFileInput])
+					g.tvApp.SetFocus(g.widgets[OutputFileInput])
 				}
 			}).
 			SetChangedFunc(func(text string) {
 				g.lEFrom.filterPatern = text
 			})
 
-		g.widgets[outputFileInput].(*tview.InputField).
+		g.widgets[OutputFileInput].(*tview.InputField).
 			SetDoneFunc(func(key tcell.Key) {
 				if key == tcell.KeyTab {
-					g.tvApp.SetFocus(g.widgets[saveEventLogButton])
+					g.tvApp.SetFocus(g.widgets[SaveEventLogButton])
 				}
 			}).
 			SetChangedFunc(func(text string) {
@@ -327,10 +364,10 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		// 	g.tvApp.SetFocus(g.widgets[dropDowns[(i+1)%len(dropDowns)]])
 		// })
 	}
-	button := g.widgets[saveEventLogButton].(*tview.Button)
+	button := g.widgets[SaveEventLogButton].(*tview.Button)
 	button.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			g.tvApp.SetFocus(g.widgets[startYearDropDown])
+			g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 		}
 		return event
 	})
@@ -424,27 +461,27 @@ func (g *gui) makeFormResult() logEventInut {
 // 	}
 // }
 
-func (g *gui) inputForm(ddk string, text string) {
+func (g *gui) inputForm(ddk Widget, text string) {
 	switch ddk {
-	case startYearDropDown:
+	case StartYearDropDown:
 		g.lEFrom.startYear = string2int(text)
-	case startMonthDropDown:
+	case StartMonthDropDown:
 		g.lEFrom.startMonth = string2month(text)
-	case startDayDropDown:
+	case StartDayDropDown:
 		g.lEFrom.startDay = string2int(text)
-	case startHourDropDown:
+	case StartHourDropDown:
 		g.lEFrom.startHour = string2int(text)
-	case startMinuteDropDown:
+	case StartMinuteDropDown:
 		g.lEFrom.startMinute = string2int(text)
-	case endYearDropDown:
+	case EndYearDropDown:
 		g.lEFrom.endYear = string2int(text)
-	case endMonthDropDown:
+	case EndMonthDropDown:
 		g.lEFrom.endMonth = string2month(text)
-	case endDayDropDown:
+	case EndDayDropDown:
 		g.lEFrom.endDay = string2int(text)
-	case endHourDropDown:
+	case EndHourDropDown:
 		g.lEFrom.endHour = string2int(text)
-	case endMinuteDropDown:
+	case EndMinuteDropDown:
 		g.lEFrom.endMinute = string2int(text)
 	}
 }
