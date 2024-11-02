@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/rivo/tview"
@@ -48,13 +49,22 @@ func (a *App) Run() {
 	}
 }
 
-func getDaysByMonth(year int, month time.Month) []time.Time {
-	var days []time.Time
+func getDaysByMonth(month string) []string {
+	var days []string
+	y := 2024
+	intMonth, err := strconv.Atoi(month)
+	if err != nil {
+		log.Fatalf("unable to convert month to integer, %v", err)
+	}
+	m := time.Month(intMonth)
+
 	// Start from the first day of the month
-	startDate := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	startDate := time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
 	// Get the number of days in the month
-	for d := startDate; d.Month() == month; d = d.AddDate(0, 0, 1) {
-		days = append(days, d)
+	for d := startDate; d.Month() == m; d = d.AddDate(0, 0, 1) {
+		// Convert day to a string without leading zero
+		dayStr := strconv.Itoa(d.Day())
+		days = append(days, dayStr)
 	}
 	return days
 }

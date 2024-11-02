@@ -125,6 +125,27 @@ func (g *gui) setGui(aw *awsResource) {
 }
 
 func (g *gui) setLogEventLayout() {
+	g.setLogEventWidget()
+	g.layouts[LogEventLayout] = tview.NewFlex().
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[StartYearDropDown], 0, 1, true).
+			AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
+			AddItem(g.widgets[StartDayDropDown], 0, 1, false).
+			AddItem(g.widgets[StartHourDropDown], 0, 1, false).
+			AddItem(g.widgets[StartMinuteDropDown], 0, 1, false), 0, 10, true).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[EndYearDropDown], 0, 1, false).
+			AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
+			AddItem(g.widgets[EndDayDropDown], 0, 1, false).
+			AddItem(g.widgets[EndHourDropDown], 0, 1, false).
+			AddItem(g.widgets[EndMinuteDropDown], 0, 1, false), 0, 10, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[FilterPaternInput], 0, 1, false).
+			AddItem(g.widgets[OutputFileInput], 0, 1, false).
+			AddItem(g.widgets[SaveEventLogButton], 0, 1, false), 0, 1, false)
+}
+
+func (g *gui) setLogEventWidget() {
 	var months []string
 	for i := 1; i <= 12; i++ {
 		months = append(months, fmt.Sprintf("%d", i))
@@ -170,27 +191,16 @@ func (g *gui) setLogEventLayout() {
 	g.widgets[OutputFileInput] = tview.NewInputField().SetLabel("Output File")
 
 	g.widgets[SaveEventLogButton] = tview.NewButton("Save")
-
-	g.layouts[LogEventLayout] = tview.NewFlex().
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[StartYearDropDown], 0, 1, true).
-			AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[StartDayDropDown], 0, 1, false).
-			AddItem(g.widgets[StartHourDropDown], 0, 1, false).
-			AddItem(g.widgets[StartMinuteDropDown], 0, 1, false), 0, 10, true).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[EndYearDropDown], 0, 1, false).
-			AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[EndDayDropDown], 0, 1, false).
-			AddItem(g.widgets[EndHourDropDown], 0, 1, false).
-			AddItem(g.widgets[EndMinuteDropDown], 0, 1, false), 0, 10, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[FilterPaternInput], 0, 1, false).
-			AddItem(g.widgets[OutputFileInput], 0, 1, false).
-			AddItem(g.widgets[SaveEventLogButton], 0, 1, false), 0, 1, false)
 }
 
 func (g *gui) setLogGroupLayout() {
+	g.setLogGroupWidget()
+	g.layouts[LogGroupLayout] = tview.NewFlex().
+		AddItem(g.widgets[LogGroupList], 0, 30, false).SetDirection(tview.FlexRow).
+		AddItem(g.widgets[LogGroupSearch], 0, 1, false)
+}
+
+func (g *gui) setLogGroupWidget() {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetBorder(true)
 	list.SetTitle("Log Groups")
@@ -203,10 +213,6 @@ func (g *gui) setLogGroupLayout() {
 	search.SetBorder(true)
 	search.SetFieldBackgroundColor(tcell.ColorGray)
 	g.widgets[LogGroupSearch] = search
-
-	g.layouts[LogGroupLayout] = tview.NewFlex().
-		AddItem(g.widgets[LogGroupList], 0, 30, false).SetDirection(tview.FlexRow).
-		AddItem(g.widgets[LogGroupSearch], 0, 1, false)
 }
 
 func (g *gui) setKeybinding(aw *awsResource) {
@@ -332,9 +338,24 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 				return event
 			})
 
-		nowDropdown.SetSelectedFunc(func(text string, index int) {
-			g.inputForm(name, text)
-		})
+		if name == StartMonthDropDown {
+			nowDropdown.SetSelectedFunc(func(text string, index int) {
+				g.inputForm(name, text)
+				g.widgets[StartDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil)
+
+				// update days
+			})
+		} else if name == EndMonthDropDown {
+			nowDropdown.SetSelectedFunc(func(text string, index int) {
+				g.inputForm(name, text)
+				// update days
+			})
+		} else {
+			nowDropdown.SetSelectedFunc(func(text string, index int) {
+				g.inputForm(name, text)
+				// update days
+			})
+		}
 
 		g.widgets[FilterPaternInput].(*tview.InputField).
 			SetDoneFunc(func(key tcell.Key) {
