@@ -338,22 +338,20 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 				return event
 			})
 
-		if name == StartMonthDropDown {
+		switch name {
+		case StartMonthDropDown:
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
 				g.inputForm(name, text)
 				g.widgets[StartDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil)
-
-				// update days
 			})
-		} else if name == EndMonthDropDown {
+		case EndMonthDropDown:
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
 				g.inputForm(name, text)
-				// update days
+				g.widgets[EndDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil)
 			})
-		} else {
+		default:
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
 				g.inputForm(name, text)
-				// update days
 			})
 		}
 
