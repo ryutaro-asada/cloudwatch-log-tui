@@ -76,6 +76,25 @@ func (a *awsResource) getLogGroups() {
 	}
 }
 
+func (a *awsResource) getLogStreams(logGroupName string) {
+	input := &cwl.DescribeLogStreamsInput{
+		LogGroupName: aws.String(logGroupName),
+	}
+	paginator := cwl.NewDescribeLogStreamsPaginator(a.client, input, func(o *cwl.DescribeLogStreamsPaginatorOptions) {
+		o.Limit = 50
+	})
+
+	for paginator.HasMorePages() {
+
+		res, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			log.Fatalf("unable to list tables, %v", err)
+		}
+
+		a.logStreams = append(a.logStreams, res.LogStreams...)
+	}
+}
+
 func startTime(lef *logEventForm) *int64 {
 	if lef.startTimeSelected {
 		return aws.Int64(time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local).UnixMilli())

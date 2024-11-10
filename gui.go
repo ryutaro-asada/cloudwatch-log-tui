@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,11 +30,14 @@ const (
 
 	// Layout names
 	LogGroupLayout Layout = iota
+	LogStreamLayout
 	LogEventLayout
 
 	// Widget names
-	LogGroupList Widget = iota
+	LogGroupTable Widget = iota
 	LogGroupSearch
+	LogStreamTable
+	LogStreamSearch
 	StartYearDropDown
 	StartMonthDropDown
 	StartDayDropDown
@@ -56,13 +60,16 @@ var pageNames = map[Page]string{
 }
 
 var layoutNames = map[Layout]string{
-	LogGroupLayout: "LogGroup",
-	LogEventLayout: "LogEvent",
+	LogGroupLayout:  "LogGroup",
+	LogStreamLayout: "LogStream",
+	LogEventLayout:  "LogEvent",
 }
 
 var widgetNames = map[Widget]string{
-	LogGroupList:        "LogGroupeList",
+	LogGroupTable:       "LogGroupTable",
 	LogGroupSearch:      "LogGroupSearch",
+	LogStreamTable:      "LogStreamTable",
+	LogStreamSearch:     "LogStreamSearch",
 	StartYearDropDown:   "StartYear",
 	StartMonthDropDown:  "StartMonth",
 	StartDayDropDown:    "StartDay",
@@ -79,15 +86,26 @@ var widgetNames = map[Widget]string{
 }
 
 type gui struct {
-	tvApp   *tview.Application
-	pages   *tview.Pages
-	layouts map[Layout]*tview.Flex
-	widgets map[Widget]tview.Primitive
-	lEFrom  *logEventForm
+	tvApp     *tview.Application
+	pages     *tview.Pages
+	layouts   map[Layout]*tview.Flex
+	widgets   map[Widget]tview.Primitive
+	lEFrom    *logEventForm
+	logGroup  *logGroup
+	logStream *logStream
 
 	// logGroupFuncs map[string]func()
 	// logEventFuncs map[string]func()
 }
+
+type logGroup struct {
+	filterPatern string
+}
+
+type logStream struct {
+	filterPatern string
+}
+
 type logEventForm struct {
 	startTimeSelected  bool
 	startYear          int
@@ -102,6 +120,7 @@ type logEventForm struct {
 	endHour            int
 	endMinute          int
 	logGroupName       string
+	logStreamNames     []string
 	filterPatern       string
 	enableFilterPatern bool
 	outputFile         string
@@ -120,7 +139,7 @@ func (g *gui) setGui(aw *awsResource) {
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
 		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
 
-	g.setLogGroupToGui(aw.logGroups, "*")
+	g.setLogGroupToGui(aw.logGroups)
 	g.setKeybinding(aw)
 }
 
@@ -195,16 +214,32 @@ func (g *gui) setLogEventWidget() {
 
 func (g *gui) setLogGroupLayout() {
 	g.setLogGroupWidget()
+	g.setLogStreamWidget()
 	g.layouts[LogGroupLayout] = tview.NewFlex().
-		AddItem(g.widgets[LogGroupList], 0, 30, false).SetDirection(tview.FlexRow).
-		AddItem(g.widgets[LogGroupSearch], 0, 1, false)
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[LogGroupTable], 0, 30, false).
+			AddItem(g.widgets[LogGroupSearch], 0, 1, false), 0, 10, true).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(g.widgets[LogStreamTable], 0, 30, true).
+			AddItem(g.widgets[LogStreamSearch], 0, 1, false), 0, 10, false)
 }
 
 func (g *gui) setLogGroupWidget() {
-	list := tview.NewList().ShowSecondaryText(false)
-	list.SetBorder(true)
-	list.SetTitle("Log Groups")
-	g.widgets[LogGroupList] = list
+	// list := tview.NewList().ShowSecondaryText(false)
+	// list.SetBorder(true)
+	// list.SetTitle("Log Groups")
+	// g.widgets[LogGroupTable] = list
+
+	table := tview.NewTable().
+		SetSelectable(true, false).
+		Select(0, 0).
+		SetFixed(1, 1)
+
+	table.SetTitle("Log Groups")
+	table.SetTitleAlign(tview.AlignLeft)
+	table.SetBorder(true)
+
+	g.widgets[LogGroupTable] = table
 
 	search := tview.NewInputField().SetLabel("Word")
 	search.SetLabelWidth(6)
@@ -215,39 +250,188 @@ func (g *gui) setLogGroupWidget() {
 	g.widgets[LogGroupSearch] = search
 }
 
+func (g *gui) setLogStreamWidget() {
+	// list := tview.NewList().ShowSecondaryText(false)
+	// list.SetBorder(true)
+	// list.SetTitle("Log Streams")
+
+	table := tview.NewTable().
+		SetSelectable(true, false).
+		Select(0, 0).
+		SetFixed(1, 1)
+
+	table.SetTitle("Log Streams")
+	table.SetTitleAlign(tview.AlignLeft)
+	table.SetBorder(true)
+	g.widgets[LogStreamTable] = table
+
+	search := tview.NewInputField().SetLabel("Word")
+	search.SetLabelWidth(6)
+	search.SetTitle("search")
+	search.SetTitleAlign(tview.AlignLeft)
+	search.SetBorder(true)
+	search.SetFieldBackgroundColor(tcell.ColorGray)
+	g.widgets[LogStreamSearch] = search
+}
+
 func (g *gui) setKeybinding(aw *awsResource) {
-	g.setLogGroupKeybinding(aw.logGroups)
+	g.setLogGroupKeybinding(aw)
+	g.setLogStreamKeybinding(aw)
 	g.setLogEventKeybinding(aw)
 }
 
-func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup, filterPatern string) {
-	for _, lg := range loggs {
+func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup) {
+	lgTable := g.widgets[LogGroupTable].(*tview.Table)
 
-		if filterPatern != "*" {
-			if !strings.Contains(aws.ToString(lg.LogGroupName), filterPatern) {
+	headers := []string{
+		"Name",
+		"RetentionDays",
+		"StoredBytes",
+	}
+
+	for i, header := range headers {
+		lgTable.SetCell(0, i, &tview.TableCell{
+			Text:            header,
+			NotSelectable:   true,
+			Align:           tview.AlignLeft,
+			Color:           tcell.ColorWhite,
+			BackgroundColor: tcell.ColorDefault,
+			Attributes:      tcell.AttrBold,
+		})
+	}
+
+	row := 0
+	for _, lg := range loggs {
+		lgName := aws.ToString(lg.LogGroupName)
+		// int32 to string
+		retentionDays := fmt.Sprintf("%d", aws.ToInt32(lg.RetentionInDays))
+		storedBytes := fmt.Sprintf("%d", aws.ToInt64(lg.StoredBytes))
+		log.Println("storedBytes")
+		log.Println(storedBytes)
+
+		if g.logGroup.filterPatern != "*" {
+			if !strings.Contains(lgName, g.logGroup.filterPatern) {
 				continue
 			}
 		}
 
-		lgList := g.widgets[LogGroupList].(*tview.List)
-		lgList.AddItem(aws.ToString(lg.LogGroupName), "", NoShortcut, nil)
+		lgTable.SetCell(row+1, 0, tview.NewTableCell(lgName).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(7))
+
+		lgTable.SetCell(row+1, 1, tview.NewTableCell(retentionDays).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(1))
+
+		lgTable.SetCell(row+1, 2, tview.NewTableCell(storedBytes).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(1))
+
+		row++
+
 	}
 }
 
-func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
-	lgList := g.widgets[LogGroupList].(*tview.List)
+func (g *gui) setLogStreamToGui(logss []cwlTypes.LogStream) {
+	lsTable := g.widgets[LogStreamTable].(*tview.Table)
+
+	headers := []string{
+		"Selected",
+		"Name",
+		"LastEventTime",
+		"FirstEventTime",
+	}
+
+	for i, header := range headers {
+		lsTable.SetCell(0, i, &tview.TableCell{
+			Text:            header,
+			NotSelectable:   true,
+			Align:           tview.AlignLeft,
+			Color:           tcell.ColorWhite,
+			BackgroundColor: tcell.ColorDefault,
+			Attributes:      tcell.AttrBold,
+		})
+	}
+
+	lsTable.SetCell(1, 0, tview.NewTableCell("").
+		SetTextColor(tcell.ColorLightGreen).
+		SetMaxWidth(1).
+		SetExpansion(1))
+
+	lsTable.SetCell(1, 1, tview.NewTableCell("All Log Streams").
+		SetTextColor(tcell.ColorLightGreen).
+		SetMaxWidth(1).
+		SetExpansion(10))
+
+	lsTable.SetCell(1, 2, tview.NewTableCell("").
+		SetTextColor(tcell.ColorLightGreen).
+		SetMaxWidth(1).
+		SetExpansion(2))
+
+	lsTable.SetCell(1, 3, tview.NewTableCell("").
+		SetTextColor(tcell.ColorLightGreen).
+		SetMaxWidth(1).
+		SetExpansion(2))
+
+	row := 2
+	for _, ls := range logss {
+		lsName := aws.ToString(ls.LogStreamName)
+		lastEventTime := time.Unix(aws.ToInt64(ls.LastEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
+		firstEventTime := time.Unix(aws.ToInt64(ls.FirstEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
+		selectedMark := ""
+
+		if g.logStream.filterPatern != "*" {
+			if !strings.Contains(lsName, g.logStream.filterPatern) {
+				continue
+			}
+		}
+
+		if slices.Contains(g.lEFrom.logStreamNames, lsName) {
+			selectedMark = "x"
+		}
+
+		lsTable.SetCell(row, 0, tview.NewTableCell(selectedMark).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(1))
+
+		lsTable.SetCell(row, 1, tview.NewTableCell(lsName).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(10))
+
+		lsTable.SetCell(row, 2, tview.NewTableCell(lastEventTime).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
+
+		lsTable.SetCell(row, 3, tview.NewTableCell(firstEventTime).
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
+
+		row++
+
+	}
+}
+
+func (g *gui) setLogGroupKeybinding(aw *awsResource) {
+	lgTable := g.widgets[LogGroupTable].(*tview.Table)
 	lgSearch := g.widgets[LogGroupSearch].(*tview.InputField)
 
-	lgList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		max := lgList.GetItemCount()
-		now := lgList.GetCurrentItem()
+	lgTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		max := lgTable.GetRowCount()
+		row, col := lgTable.GetSelection()
 		switch event.Rune() {
 		case 'k':
 			// up
-			lgList.SetCurrentItem((now - 1) % max)
+			lgTable.Select((row)%max, col)
 		case 'j':
 			// down
-			lgList.SetCurrentItem((now + 1) % max)
+			lgTable.Select((row)%max, col)
 
 		case '/':
 			g.tvApp.SetFocus(lgSearch)
@@ -255,31 +439,117 @@ func (g *gui) setLogGroupKeybinding(resLogGroup []cwlTypes.LogGroup) {
 		return event
 	})
 
-	lgList.SetSelectedFunc(func(index int, mtxt string, stxt string, shortcut rune) {
-		// app.getLogEvents(mtxt)
-		//
-		// log.Println(mtxt)
-		g.lEFrom.logGroupName = mtxt
-		g.pages.SwitchToPage(pageNames[LogEventPage])
-		g.tvApp.SetFocus(g.widgets[StartYearDropDown])
-		// time.Sleep(3 * time.Second)
-		// filterLogEventForm.Clear(false)
+	lgTable.SetSelectedFunc(func(row, column int) {
+		cell := lgTable.GetCell(row, column)
+		log.Println("cell name")
+		log.Println(cell.Text)
+		g.lEFrom.logGroupName = cell.Text
+		aw.getLogStreams(cell.Text)
+		g.setLogStreamToGui(aw.logStreams)
+		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
 
 	lgSearch.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
-			g.tvApp.SetFocus(lgList)
+			g.tvApp.SetFocus(g.widgets[LogGroupTable])
 		}
 	})
 	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
-			g.tvApp.SetFocus(lgList)
+			g.tvApp.SetFocus(lgTable)
 		}
 		return event
 	})
-	lgSearch.SetChangedFunc(func(text string) {
-		lgList.Clear()
-		g.setLogGroupToGui(resLogGroup, text)
+	lgSearch.SetChangedFunc(func(filterPatern string) {
+		lgTable.Clear()
+		g.logGroup.filterPatern = filterPatern
+		g.setLogGroupToGui(aw.logGroups)
+	})
+}
+
+func (g *gui) setLogStreamKeybinding(aw *awsResource) {
+	lsTable := g.widgets[LogStreamTable].(*tview.Table)
+	lgSearch := g.widgets[LogStreamSearch].(*tview.InputField)
+
+	lsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		max := lsTable.GetRowCount()
+		row, col := lsTable.GetSelection()
+		switch event.Rune() {
+		case 'k':
+			// up
+			lsTable.Select((row)%max, col)
+		case 'j':
+			// down
+			lsTable.Select((row)%max, col)
+
+		case '/':
+			g.tvApp.SetFocus(lgSearch)
+		// Space key
+		case ' ':
+
+			cell := lsTable.GetCell(row, 1)
+			logStreamName := cell.Text
+			log.Println("selected log stream name")
+			log.Println(logStreamName)
+			if logStreamName == "All Log Streams" {
+				return nil
+			}
+			log.Println(logStreamName)
+			// log.Println(selectedMark)
+			lsTable.Clear()
+
+			switch slices.Contains(g.lEFrom.logStreamNames, logStreamName) {
+			case true:
+				i := slices.Index(g.lEFrom.logStreamNames, logStreamName)
+				g.lEFrom.logStreamNames = slices.Delete(g.lEFrom.logStreamNames, i, i+1)
+			case false:
+				g.lEFrom.logStreamNames = append(g.lEFrom.logStreamNames, logStreamName)
+			}
+
+			g.setLogStreamToGui(aw.logStreams)
+
+			log.Print("selected log stream names")
+			log.Print(g.lEFrom.logStreamNames)
+
+			log.Println("space")
+			return nil
+		}
+		log.Println(event.Key())
+		log.Println(event.Rune())
+		// translate rune to string
+		log.Println(string(event.Rune()))
+		log.Println("===========")
+		return event
+	})
+
+	lsTable.SetSelectedFunc(func(row, col int) {
+		cell := lsTable.GetCell(row, 1)
+		logStreamName := cell.Text
+		if logStreamName == "All Log Streams" {
+			g.lEFrom.logStreamNames = nil
+		} else {
+			g.lEFrom.logStreamNames = append(g.lEFrom.logStreamNames, logStreamName)
+			g.lEFrom.logStreamNames = slices.Compact(g.lEFrom.logStreamNames)
+		}
+		g.pages.SwitchToPage(pageNames[LogEventPage])
+		g.tvApp.SetFocus(g.widgets[StartYearDropDown])
+	})
+
+	lgSearch.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			g.tvApp.SetFocus(lsTable)
+		}
+	})
+	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			g.tvApp.SetFocus(lsTable)
+		}
+		return event
+	})
+	lgSearch.SetChangedFunc(func(filterPatern string) {
+		lsTable.Clear()
+		g.logStream.filterPatern = filterPatern
+		g.setLogStreamToGui(aw.logStreams)
 	})
 }
 
@@ -331,7 +601,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 					return event
 				}
 				if event.Key() == tcell.KeyEsc {
-					g.tvApp.SetFocus(g.widgets[LogGroupList])
+					g.tvApp.SetFocus(g.widgets[LogGroupTable])
 				} else if event.Key() == tcell.KeyTab {
 					g.tvApp.SetFocus(nextWidget)
 				}
@@ -391,17 +661,6 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		return event
 	})
 	button.SetSelectedFunc(func() {
-		log.Println(g.lEFrom.startYear)
-		log.Println(g.lEFrom.startMonth)
-		log.Println(g.lEFrom.startDay)
-		log.Println(g.lEFrom.startHour)
-		log.Println(g.lEFrom.startMinute)
-		log.Println(g.lEFrom.endYear)
-		log.Println(g.lEFrom.endMonth)
-		log.Println(g.lEFrom.endDay)
-		log.Println(g.lEFrom.endHour)
-		log.Println(g.lEFrom.endMinute)
-		log.Println("save")
 		result := g.makeFormResult()
 		aw.getLogEvents(result)
 	})
@@ -448,10 +707,11 @@ func (g *gui) makeFormResult() logEventInut {
 	}
 	return logEventInut{
 		awsInput: &cwl.FilterLogEventsInput{
-			LogGroupName:  aws.String(lef.logGroupName),
-			StartTime:     startTime(lef),
-			EndTime:       endTime(lef),
-			FilterPattern: filterPattern(lef),
+			LogGroupName:   aws.String(lef.logGroupName),
+			LogStreamNames: lef.logStreamNames,
+			StartTime:      startTime(lef),
+			EndTime:        endTime(lef),
+			FilterPattern:  filterPattern(lef),
 		},
 		outputFile: lef.outputFile,
 	}

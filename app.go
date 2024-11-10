@@ -33,6 +33,12 @@ func NewApp() *App {
 				enableFilterPatern: false,
 				enableOutputFile:   false,
 			},
+			logGroup: &logGroup{
+				filterPatern: "*",
+			},
+			logStream: &logStream{
+				filterPatern: "*",
+			},
 		},
 		awsr: &awsResource{
 			client: cwl.NewFromConfig(cfg),
@@ -43,7 +49,7 @@ func NewApp() *App {
 func (a *App) Run() {
 	if err := a.gui.tvApp.SetRoot(a.gui.pages, true).
 		EnableMouse(true).
-		SetFocus(a.gui.widgets[LogGroupList]).
+		SetFocus(a.gui.widgets[LogGroupTable]).
 		Run(); err != nil {
 		panic(err)
 	}
