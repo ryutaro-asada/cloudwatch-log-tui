@@ -42,6 +42,7 @@ func NewApp() *App {
 		},
 		awsr: &awsResource{
 			client: cwl.NewFromConfig(cfg),
+			pageTokenLogGroup: make(map[int]*string),
 		},
 	}
 }

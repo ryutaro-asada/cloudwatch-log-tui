@@ -19,6 +19,8 @@ type (
 	Page   int
 	Layout int
 	Widget int
+	// page direction of Log
+	Direction int
 )
 
 const (
@@ -51,6 +53,9 @@ const (
 	FilterPaternInput
 	OutputFileInput
 	SaveEventLogButton
+
+	Next Direction = iota
+	Prev
 )
 
 // Create a map to hold the string representations of the enums
@@ -139,7 +144,7 @@ func (g *gui) setGui(aw *awsResource) {
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
 		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
 
-	g.setLogGroupToGui(aw.logGroups)
+	g.setLogGroupToGui(aw)
 	g.setKeybinding(aw)
 }
 
@@ -243,7 +248,7 @@ func (g *gui) setLogGroupWidget() {
 
 	search := tview.NewInputField().SetLabel("Word")
 	search.SetLabelWidth(6)
-	search.SetTitle("search")
+	search.SetTitle("Search for Log Groups")
 	search.SetTitleAlign(tview.AlignLeft)
 	search.SetBorder(true)
 	search.SetFieldBackgroundColor(tcell.ColorGray)
@@ -267,7 +272,7 @@ func (g *gui) setLogStreamWidget() {
 
 	search := tview.NewInputField().SetLabel("Word")
 	search.SetLabelWidth(6)
-	search.SetTitle("search")
+	search.SetTitle("Search for Log Streams")
 	search.SetTitleAlign(tview.AlignLeft)
 	search.SetBorder(true)
 	search.SetFieldBackgroundColor(tcell.ColorGray)
@@ -280,7 +285,7 @@ func (g *gui) setKeybinding(aw *awsResource) {
 	g.setLogEventKeybinding(aw)
 }
 
-func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup) {
+func (g *gui) setLogGroupToGui(aw *awsResource) {
 	lgTable := g.widgets[LogGroupTable].(*tview.Table)
 
 	headers := []string{
@@ -289,8 +294,9 @@ func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup) {
 		"StoredBytes",
 	}
 
+	row := 0
 	for i, header := range headers {
-		lgTable.SetCell(0, i, &tview.TableCell{
+		lgTable.SetCell(row, i, &tview.TableCell{
 			Text:            header,
 			NotSelectable:   true,
 			Align:           tview.AlignLeft,
@@ -299,9 +305,17 @@ func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup) {
 			Attributes:      tcell.AttrBold,
 		})
 	}
+	row++
 
-	row := 0
-	for _, lg := range loggs {
+	if aw.hasPrevLogGroup {
+		lgTable.SetCell(row, 0, tview.NewTableCell("Prev Page").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(7))
+		row++
+	}
+
+	for _, lg := range aw.logGroups {
 		lgName := aws.ToString(lg.LogGroupName)
 		// int32 to string
 		retentionDays := fmt.Sprintf("%d", aws.ToInt32(lg.RetentionInDays))
@@ -315,23 +329,29 @@ func (g *gui) setLogGroupToGui(loggs []cwlTypes.LogGroup) {
 			}
 		}
 
-		lgTable.SetCell(row+1, 0, tview.NewTableCell(lgName).
+		lgTable.SetCell(row, 0, tview.NewTableCell(lgName).
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
 			SetExpansion(7))
 
-		lgTable.SetCell(row+1, 1, tview.NewTableCell(retentionDays).
+		lgTable.SetCell(row, 1, tview.NewTableCell(retentionDays).
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
 			SetExpansion(1))
 
-		lgTable.SetCell(row+1, 2, tview.NewTableCell(storedBytes).
+		lgTable.SetCell(row, 2, tview.NewTableCell(storedBytes).
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
 			SetExpansion(1))
 
 		row++
+	}
 
+	if aw.hasNextLogGroup {
+		lgTable.SetCell(row, 0, tview.NewTableCell("Next Page").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(7))
 	}
 }
 
@@ -448,6 +468,23 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		g.setLogStreamToGui(aw.logStreams)
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
+	lgTable.SetSelectionChangedFunc(func(row, column int) {
+		cell := lgTable.GetCell(row, column)
+		if cell.Text == "Prev Page" {
+			aw.getLogGroups(Prev)
+			lgTable.Clear()
+			g.setLogGroupToGui(aw)
+			lgTable.Select(lgTable.GetRowCount()-2, 1)
+			log.Println("get row cont.......................", lgTable.GetRowCount())
+
+			// lgTable.Select(1, 1)
+		} else if cell.Text == "Next Page" {
+			aw.getLogGroups(Next)
+			lgTable.Clear()
+			g.setLogGroupToGui(aw)
+			lgTable.Select(1, 1)
+		}
+	})
 
 	lgSearch.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
@@ -463,7 +500,7 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	lgSearch.SetChangedFunc(func(filterPatern string) {
 		lgTable.Clear()
 		g.logGroup.filterPatern = filterPatern
-		g.setLogGroupToGui(aw.logGroups)
+		g.setLogGroupToGui(aw)
 	})
 }
 

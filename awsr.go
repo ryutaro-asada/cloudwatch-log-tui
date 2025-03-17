@@ -12,10 +12,21 @@ import (
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+const maxItemsInPage int32 = 50
+
 type awsResource struct {
-	logGroups  []cwlTypes.LogGroup
-	logStreams []cwlTypes.LogStream
-	client     *cwl.Client
+	logGroups           []cwlTypes.LogGroup
+	currentPageLogGroup int
+	pageTokenLogGroup   map[int]*string
+	hasNextLogGroup     bool
+	hasPrevLogGroup     bool
+
+	// pagesLogGroup  *cwl.DescribeLogGroupsPaginator
+	logStreams           []cwlTypes.LogStream
+	currentPageLogStream int
+	nextTokensLogStream  []*string
+	// pagesLogStream *cwl.DescribeLogStreamsPaginator
+	client *cwl.Client
 }
 
 func (a *awsResource) getLogEvents(input logEventInut) {
@@ -59,22 +70,77 @@ func (a *awsResource) getLogEvents(input logEventInut) {
 	}
 }
 
-func (a *awsResource) getLogGroups() {
-	input := &cwl.DescribeLogGroupsInput{}
-	paginator := cwl.NewDescribeLogGroupsPaginator(a.client, input, func(o *cwl.DescribeLogGroupsPaginatorOptions) {
-		o.Limit = 50
-	})
+// func (a *awsResource) getPageLogGroups() {
+// 	input := &cwl.DescribeLogGroupsInput{}
+// 	a.pagesLogGroup = cwl.NewDescribeLogGroupsPaginator(a.client, input, func(o *cwl.DescribeLogGroupsPaginatorOptions) {
+// 		o.Limit = 50
+// 	})
+// }
 
-	for paginator.HasMorePages() {
+func (a *awsResource) getLogGroups(direct Direction) {
+	// input := &cwl.DescribeLogGroupsInput{}
+	// paginator := cwl.NewDescribeLogGroupsPaginator(a.client, input, func(o *cwl.DescribeLogGroupsPaginatorOptions) {
+	// 	o.Limit = 50
+	// })
 
-		res, err := paginator.NextPage(context.TODO())
-		if err != nil {
-			log.Fatalf("unable to list tables, %v", err)
-		}
-
-		a.logGroups = append(a.logGroups, res.LogGroups...)
+	params := &cwl.DescribeLogGroupsInput{
+		Limit: aws.Int32(maxItemsInPage),
 	}
+	if direct == Next && a.hasNextLogGroup {
+		params.NextToken = a.pageTokenLogGroup[a.currentPageLogGroup+1]
+	} else if direct == Prev && a.hasPrevLogGroup {
+		params.NextToken = a.pageTokenLogGroup[a.currentPageLogGroup-1]
+	}
+
+	res, err := a.client.DescribeLogGroups(context.TODO(), params)
+	// log.Println("next token ...................")
+	// log.Println(res.NextToken)
+	if err != nil {
+		log.Fatalf("unable to list tables, %v", err)
+	}
+	a.logGroups = res.LogGroups
+
+	if direct == Next {
+		a.currentPageLogGroup++
+	} else if direct == Prev {
+		a.currentPageLogGroup--
+	}
+
+	if res.NextToken != nil {
+		a.pageTokenLogGroup[a.currentPageLogGroup+1] = res.NextToken
+		a.hasNextLogGroup = true
+	} else {
+		a.hasNextLogGroup = false
+	}
+
+	if a.currentPageLogGroup > 1 {
+		a.hasPrevLogGroup = true
+	} else {
+		a.hasPrevLogGroup = false
+	}
+
+	// log.Println("map ...................", a.pageTokenLogGroup)
+	// log.Println("currentPage ...................", a.currentPageLogGroup)
+
+	// for paginator.HasMorePages() {
+	//
+	// 	res, err := paginator.NextPage(context.TODO())
+	// 	if err != nil {
+	// 		log.Fatalf("unable to list tables, %v", err)
+	// 	}
+	//
+	// 	a.logGroups = append(a.logGroups, res.LogGroups...)
+	// }
 }
+
+// func (a *awsResource) getLogStreams(logGroupName string) {
+// 	input := &cwl.DescribeLogStreamsInput{
+// 		LogGroupName: aws.String(logGroupName),
+// 	}
+// 	a.pagesLogStream = cwl.NewDescribeLogStreamsPaginator(a.client, input, func(o *cwl.DescribeLogStreamsPaginatorOptions) {
+// 		o.Limit = 50
+// 	})
+// }
 
 func (a *awsResource) getLogStreams(logGroupName string) {
 	input := &cwl.DescribeLogStreamsInput{
