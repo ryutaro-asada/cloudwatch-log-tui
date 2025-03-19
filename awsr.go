@@ -17,14 +17,17 @@ const maxItemsInPage int32 = 50
 type awsResource struct {
 	logGroups           []cwlTypes.LogGroup
 	currentPageLogGroup int
-	pageTokenLogGroup   map[int]*string
+	pageTokensLogGroup   map[int]*string
 	hasNextLogGroup     bool
 	hasPrevLogGroup     bool
 
 	// pagesLogGroup  *cwl.DescribeLogGroupsPaginator
 	logStreams           []cwlTypes.LogStream
 	currentPageLogStream int
-	nextTokensLogStream  []*string
+	pageTokensLogStream  map[int]*string
+	hasNextLogStream     bool
+	hasPrevLogStream     bool
+
 	// pagesLogStream *cwl.DescribeLogStreamsPaginator
 	client *cwl.Client
 }
@@ -70,94 +73,123 @@ func (a *awsResource) getLogEvents(input logEventInut) {
 	}
 }
 
-// func (a *awsResource) getPageLogGroups() {
-// 	input := &cwl.DescribeLogGroupsInput{}
-// 	a.pagesLogGroup = cwl.NewDescribeLogGroupsPaginator(a.client, input, func(o *cwl.DescribeLogGroupsPaginatorOptions) {
-// 		o.Limit = 50
-// 	})
-// }
+func (a *awsResource) getLogGroups(g *gui) {
+	// if direction is next,
+	// - increment currentPageLogGroup after successful call
+	// - set hasNextLogGroup to true if NextToken of responce is not nil
+	// - set hasPrevLogGroup to true if currentPageLogGroup > 1
+	// - set NextToken of currentPageLogGroup+1
 
-func (a *awsResource) getLogGroups(direct Direction) {
-	// input := &cwl.DescribeLogGroupsInput{}
-	// paginator := cwl.NewDescribeLogGroupsPaginator(a.client, input, func(o *cwl.DescribeLogGroupsPaginatorOptions) {
-	// 	o.Limit = 50
-	// })
+	// if direction is prev, decrement currentPageLogGroup
+
+	filterPatern := g.logGroup.filterPatern
+	direct := g.logGroup.direction
 
 	params := &cwl.DescribeLogGroupsInput{
 		Limit: aws.Int32(maxItemsInPage),
 	}
-	if direct == Next && a.hasNextLogGroup {
-		params.NextToken = a.pageTokenLogGroup[a.currentPageLogGroup+1]
-	} else if direct == Prev && a.hasPrevLogGroup {
-		params.NextToken = a.pageTokenLogGroup[a.currentPageLogGroup-1]
+
+	// TODO: add test
+	if filterPatern != "" {
+		log.Printf("filterPatern: %s", filterPatern)
+		params.LogGroupNamePattern = aws.String(filterPatern)
+	}
+
+	// TODO: add test
+	switch direct {
+	case Next:
+		params.NextToken = a.pageTokensLogGroup[a.currentPageLogGroup+1]
+	case Prev:
+		// if currentPageLogGroup == 1, a.pageTokenLogGroup will return nil and params.NextToken will be nil
+		// so, first page will be fetched
+		params.NextToken = a.pageTokensLogGroup[a.currentPageLogGroup-1]
 	}
 
 	res, err := a.client.DescribeLogGroups(context.TODO(), params)
-	// log.Println("next token ...................")
-	// log.Println(res.NextToken)
 	if err != nil {
 		log.Fatalf("unable to list tables, %v", err)
 	}
 	a.logGroups = res.LogGroups
 
-	if direct == Next {
+	// TODO: add test
+	switch direct {
+	case Next:
 		a.currentPageLogGroup++
-	} else if direct == Prev {
+	case Prev:
 		a.currentPageLogGroup--
 	}
+	log.Printf("currentPageLogGroup: %d", a.currentPageLogGroup)
 
+	// TODO: add test
 	if res.NextToken != nil {
-		a.pageTokenLogGroup[a.currentPageLogGroup+1] = res.NextToken
+		a.pageTokensLogGroup[a.currentPageLogGroup+1] = res.NextToken
 		a.hasNextLogGroup = true
 	} else {
 		a.hasNextLogGroup = false
 	}
 
+	// TODO: add test
 	if a.currentPageLogGroup > 1 {
 		a.hasPrevLogGroup = true
 	} else {
 		a.hasPrevLogGroup = false
 	}
-
-	// log.Println("map ...................", a.pageTokenLogGroup)
-	// log.Println("currentPage ...................", a.currentPageLogGroup)
-
-	// for paginator.HasMorePages() {
-	//
-	// 	res, err := paginator.NextPage(context.TODO())
-	// 	if err != nil {
-	// 		log.Fatalf("unable to list tables, %v", err)
-	// 	}
-	//
-	// 	a.logGroups = append(a.logGroups, res.LogGroups...)
-	// }
 }
 
-// func (a *awsResource) getLogStreams(logGroupName string) {
-// 	input := &cwl.DescribeLogStreamsInput{
-// 		LogGroupName: aws.String(logGroupName),
-// 	}
-// 	a.pagesLogStream = cwl.NewDescribeLogStreamsPaginator(a.client, input, func(o *cwl.DescribeLogStreamsPaginatorOptions) {
-// 		o.Limit = 50
-// 	})
-// }
+func (a *awsResource) getLogStreams(g *gui) {
+	prefixPatern := g.logStream.prefixPatern
+	direct := g.logStream.direction
+	logGroupName := g.logStream.logGroupName
 
-func (a *awsResource) getLogStreams(logGroupName string) {
-	input := &cwl.DescribeLogStreamsInput{
+	params := &cwl.DescribeLogStreamsInput{
 		LogGroupName: aws.String(logGroupName),
+		Limit: aws.Int32(maxItemsInPage),
 	}
-	paginator := cwl.NewDescribeLogStreamsPaginator(a.client, input, func(o *cwl.DescribeLogStreamsPaginatorOptions) {
-		o.Limit = 50
-	})
 
-	for paginator.HasMorePages() {
+	// TODO: add test
+	if prefixPatern != "" {
+		log.Printf("prefixPatern: %s", prefixPatern)
+		params.LogStreamNamePrefix = aws.String(prefixPatern)
+	}
 
-		res, err := paginator.NextPage(context.TODO())
-		if err != nil {
-			log.Fatalf("unable to list tables, %v", err)
-		}
+	// TODO: add test
+	switch direct {
+	case Next:
+		params.NextToken = a.pageTokensLogStream[a.currentPageLogStream+1]
+	case Prev:
+		// if currentPageLogGroup == 1, a.pageTokenLogGroup will return nil and params.NextToken will be nil
+		// so, first page will be fetched
+		params.NextToken = a.pageTokensLogStream[a.currentPageLogStream-1]
+	}
 
-		a.logStreams = append(a.logStreams, res.LogStreams...)
+	res, err := a.client.DescribeLogStreams(context.TODO(), params)
+	if err != nil {
+		log.Fatalf("unable to list tables, %v", err)
+	}
+	a.logStreams = res.LogStreams
+
+	// TODO: add test
+	switch direct {
+	case Next:
+		a.currentPageLogStream++
+	case Prev:
+		a.currentPageLogStream--
+	}
+	log.Printf("currentPageLogGroup: %d", a.currentPageLogStream)
+
+	// TODO: add test
+	if res.NextToken != nil {
+		a.pageTokensLogStream[a.currentPageLogStream+1] = res.NextToken
+		a.hasNextLogStream = true
+	} else {
+		a.hasNextLogStream = false
+	}
+
+	// TODO: add test
+	if a.currentPageLogStream > 1 {
+		a.hasPrevLogStream = true
+	} else {
+		a.hasPrevLogStream = false
 	}
 }
 

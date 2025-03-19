@@ -33,16 +33,23 @@ func NewApp() *App {
 				enableFilterPatern: false,
 				enableOutputFile:   false,
 			},
-			logGroup: &logGroup{
-				filterPatern: "*",
+			logGroup: logGroup{
+				direction: Stay,
 			},
-			logStream: &logStream{
-				filterPatern: "*",
+			logStream: logStream{
+				direction: Stay,
 			},
+			// logGroup: &logGroup{
+			// 	filterPatern: "*",
+			// },
+			// logStream: &logStream{
+			// 	filterPatern: "*",
+			// },
 		},
 		awsr: &awsResource{
 			client: cwl.NewFromConfig(cfg),
-			pageTokenLogGroup: make(map[int]*string),
+			pageTokensLogGroup: make(map[int]*string),
+			pageTokensLogStream: make(map[int]*string),
 		},
 	}
 }

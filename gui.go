@@ -10,7 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -55,6 +54,7 @@ const (
 	SaveEventLogButton
 
 	Next Direction = iota
+	Stay 
 	Prev
 )
 
@@ -96,8 +96,8 @@ type gui struct {
 	layouts   map[Layout]*tview.Flex
 	widgets   map[Widget]tview.Primitive
 	lEFrom    *logEventForm
-	logGroup  *logGroup
-	logStream *logStream
+	logGroup  logGroup
+	logStream logStream
 
 	// logGroupFuncs map[string]func()
 	// logEventFuncs map[string]func()
@@ -105,10 +105,13 @@ type gui struct {
 
 type logGroup struct {
 	filterPatern string
+	direction    Direction
 }
 
 type logStream struct {
-	filterPatern string
+	prefixPatern string
+	direction    Direction
+	logGroupName string
 }
 
 type logEventForm struct {
@@ -355,7 +358,7 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 	}
 }
 
-func (g *gui) setLogStreamToGui(logss []cwlTypes.LogStream) {
+func (g *gui) setLogStreamToGui(aw *awsResource) {
 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
 
 	headers := []string{
@@ -365,8 +368,9 @@ func (g *gui) setLogStreamToGui(logss []cwlTypes.LogStream) {
 		"FirstEventTime",
 	}
 
+	row := 0
 	for i, header := range headers {
-		lsTable.SetCell(0, i, &tview.TableCell{
+		lsTable.SetCell(row, i, &tview.TableCell{
 			Text:            header,
 			NotSelectable:   true,
 			Align:           tview.AlignLeft,
@@ -375,36 +379,46 @@ func (g *gui) setLogStreamToGui(logss []cwlTypes.LogStream) {
 			Attributes:      tcell.AttrBold,
 		})
 	}
+	row++
 
-	lsTable.SetCell(1, 0, tview.NewTableCell("").
+	if aw.hasPrevLogStream {
+		lsTable.SetCell(row, 0, tview.NewTableCell("Prev Page").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(7))
+		row++
+	}
+
+	lsTable.SetCell(row, 0, tview.NewTableCell("").
 		SetTextColor(tcell.ColorLightGreen).
 		SetMaxWidth(1).
 		SetExpansion(1))
 
-	lsTable.SetCell(1, 1, tview.NewTableCell("All Log Streams").
+	lsTable.SetCell(row, 1, tview.NewTableCell("All Log Streams").
 		SetTextColor(tcell.ColorLightGreen).
 		SetMaxWidth(1).
 		SetExpansion(10))
 
-	lsTable.SetCell(1, 2, tview.NewTableCell("").
+	lsTable.SetCell(row, 2, tview.NewTableCell("").
 		SetTextColor(tcell.ColorLightGreen).
 		SetMaxWidth(1).
 		SetExpansion(2))
 
-	lsTable.SetCell(1, 3, tview.NewTableCell("").
+	lsTable.SetCell(row, 3, tview.NewTableCell("").
 		SetTextColor(tcell.ColorLightGreen).
 		SetMaxWidth(1).
 		SetExpansion(2))
 
-	row := 2
-	for _, ls := range logss {
+	row++
+
+	for _, ls := range aw.logStreams {
 		lsName := aws.ToString(ls.LogStreamName)
 		lastEventTime := time.Unix(aws.ToInt64(ls.LastEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
 		firstEventTime := time.Unix(aws.ToInt64(ls.FirstEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
 		selectedMark := ""
 
-		if g.logStream.filterPatern != "*" {
-			if !strings.Contains(lsName, g.logStream.filterPatern) {
+		if g.logStream.prefixPatern != "" {
+			if !strings.Contains(lsName, g.logStream.prefixPatern) {
 				continue
 			}
 		}
@@ -436,6 +450,13 @@ func (g *gui) setLogStreamToGui(logss []cwlTypes.LogStream) {
 		row++
 
 	}
+
+	if aw.hasNextLogStream {
+		lsTable.SetCell(row, 0, tview.NewTableCell("Next Page").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(7))
+	}
 }
 
 func (g *gui) setLogGroupKeybinding(aw *awsResource) {
@@ -460,18 +481,22 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	})
 
 	lgTable.SetSelectedFunc(func(row, column int) {
-		cell := lgTable.GetCell(row, column)
+		cell := lgTable.GetCell(row, 0)
 		log.Println("cell name")
 		log.Println(cell.Text)
+		log.Println("row ", row)
+		log.Println("column ", column)
 		g.lEFrom.logGroupName = cell.Text
-		aw.getLogStreams(cell.Text)
-		g.setLogStreamToGui(aw.logStreams)
+		g.logStream.logGroupName = cell.Text
+		aw.getLogStreams(g)
+		g.setLogStreamToGui(aw)
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
 	lgTable.SetSelectionChangedFunc(func(row, column int) {
 		cell := lgTable.GetCell(row, column)
 		if cell.Text == "Prev Page" {
-			aw.getLogGroups(Prev)
+			g.logGroup.direction = Prev
+			aw.getLogGroups(g)
 			lgTable.Clear()
 			g.setLogGroupToGui(aw)
 			lgTable.Select(lgTable.GetRowCount()-2, 1)
@@ -479,7 +504,8 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 
 			// lgTable.Select(1, 1)
 		} else if cell.Text == "Next Page" {
-			aw.getLogGroups(Next)
+			g.logGroup.direction = Next
+			aw.getLogGroups(g)
 			lgTable.Clear()
 			g.setLogGroupToGui(aw)
 			lgTable.Select(1, 1)
@@ -500,13 +526,15 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	lgSearch.SetChangedFunc(func(filterPatern string) {
 		lgTable.Clear()
 		g.logGroup.filterPatern = filterPatern
+		g.logGroup.direction = Stay
+		aw.getLogGroups(g)
 		g.setLogGroupToGui(aw)
 	})
 }
 
 func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
-	lgSearch := g.widgets[LogStreamSearch].(*tview.InputField)
+	lsSearch := g.widgets[LogStreamSearch].(*tview.InputField)
 
 	lsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		max := lsTable.GetRowCount()
@@ -520,7 +548,7 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 			lsTable.Select((row)%max, col)
 
 		case '/':
-			g.tvApp.SetFocus(lgSearch)
+			g.tvApp.SetFocus(lsSearch)
 		// Space key
 		case ' ':
 
@@ -543,7 +571,7 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 				g.lEFrom.logStreamNames = append(g.lEFrom.logStreamNames, logStreamName)
 			}
 
-			g.setLogStreamToGui(aw.logStreams)
+			g.setLogStreamToGui(aw)
 
 			log.Print("selected log stream names")
 			log.Print(g.lEFrom.logStreamNames)
@@ -572,21 +600,41 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 		g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 	})
 
-	lgSearch.SetDoneFunc(func(key tcell.Key) {
+	lsTable.SetSelectionChangedFunc(func(row, column int) {
+		cell := lsTable.GetCell(row, column)
+		if cell.Text == "Prev Page" {
+			g.logStream.direction = Prev
+			aw.getLogStreams(g)
+			lsTable.Clear()
+			g.setLogStreamToGui(aw)
+			lsTable.Select(lsTable.GetRowCount()-2, 1)
+			log.Println("get row cont.......................", lsTable.GetRowCount())
+		} else if cell.Text == "Next Page" {
+			g.logStream.direction = Next
+			aw.getLogStreams(g)
+			lsTable.Clear()
+			g.setLogStreamToGui(aw)
+			lsTable.Select(1, 1)
+		}
+	})
+
+	lsSearch.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			g.tvApp.SetFocus(lsTable)
 		}
 	})
-	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	lsSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
 			g.tvApp.SetFocus(lsTable)
 		}
 		return event
 	})
-	lgSearch.SetChangedFunc(func(filterPatern string) {
+	lsSearch.SetChangedFunc(func(prefixPatern string) {
 		lsTable.Clear()
-		g.logStream.filterPatern = filterPatern
-		g.setLogStreamToGui(aw.logStreams)
+		g.logStream.prefixPatern = prefixPatern
+		g.logStream.direction = Stay
+		aw.getLogStreams(g)
+		g.setLogStreamToGui(aw)
 	})
 }
 
