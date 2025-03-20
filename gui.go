@@ -5,7 +5,6 @@ import (
 	"log"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -52,10 +51,14 @@ const (
 	FilterPaternInput
 	OutputFileInput
 	SaveEventLogButton
+	ViewLog
 
 	Next Direction = iota
-	Stay 
+	Home
 	Prev
+
+	NextPage = "NextPage ..."
+	PrevPage = "... PrevPage"
 )
 
 // Create a map to hold the string representations of the enums
@@ -88,12 +91,14 @@ var widgetNames = map[Widget]string{
 	FilterPaternInput:   "FilterPatern",
 	OutputFileInput:     "OutputFile",
 	SaveEventLogButton:  "SaveEventLog",
+	ViewLog:             "ViewLog",
 }
 
 type gui struct {
-	tvApp     *tview.Application
-	pages     *tview.Pages
-	layouts   map[Layout]*tview.Flex
+	tvApp *tview.Application
+	pages *tview.Pages
+	// layouts   map[Layout]*tview.Flex
+	layouts   map[Layout]tview.Primitive
 	widgets   map[Widget]tview.Primitive
 	lEFrom    *logEventForm
 	logGroup  logGroup
@@ -153,23 +158,140 @@ func (g *gui) setGui(aw *awsResource) {
 
 func (g *gui) setLogEventLayout() {
 	g.setLogEventWidget()
-	g.layouts[LogEventLayout] = tview.NewFlex().
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[StartYearDropDown], 0, 1, true).
-			AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[StartDayDropDown], 0, 1, false).
-			AddItem(g.widgets[StartHourDropDown], 0, 1, false).
-			AddItem(g.widgets[StartMinuteDropDown], 0, 1, false), 0, 10, true).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[EndYearDropDown], 0, 1, false).
-			AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
-			AddItem(g.widgets[EndDayDropDown], 0, 1, false).
-			AddItem(g.widgets[EndHourDropDown], 0, 1, false).
-			AddItem(g.widgets[EndMinuteDropDown], 0, 1, false), 0, 10, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[FilterPaternInput], 0, 1, false).
-			AddItem(g.widgets[OutputFileInput], 0, 1, false).
-			AddItem(g.widgets[SaveEventLogButton], 0, 1, false), 0, 1, false)
+	// newPrimitive := func(text string) tview.Primitive {
+	// 	return tview.NewTextView().
+	// 		SetTextAlign(tview.AlignCenter).
+	// 		SetText(text)
+	// }
+
+	// g.layouts[LogEventLayout] = tview.NewGrid().
+	// 	SetRows(3, 0).
+	// 	SetColumns(0).
+	// 	SetBorders(true).
+	// 	AddItem(tview.NewGrid().
+	// 		SetRows(0, 0, 0).
+	// 		SetColumns(0, 0, 0, 0, 0).
+	// 		SetBorders(true).
+	// 		AddItem(newPrimitive("Menu"), 0, 0, 1, 1, 0, 100, false).
+	// 		AddItem(newPrimitive("Menu"), 0, 1, 1, 1, 0, 100, false).
+	// 		AddItem(newPrimitive("Menu"), 0, 2, 1, 1, 0, 100, false).
+	// 		AddItem(newPrimitive("Menu"), 0, 3, 1, 1, 0, 100, false).
+	// 		AddItem(newPrimitive("Menu"), 0, 4, 1, 1, 0, 100, false),
+	// 		0, 0, 1, 3, 0, 0, false)
+	g.layouts[LogEventLayout] = tview.NewGrid().
+		SetRows(
+			// drop down options
+			1, 1, 1,
+			// text view
+			0).
+		SetColumns(0, 0, 0, 0, 0).
+		SetBorders(true).
+		// start date
+		AddItem(g.widgets[StartYearDropDown],
+			0, 0, // row, column position
+			1, 1, // rowSpan, columnSpan
+			0, 100, // minGridSize, maxGridSize
+			false). // rowFixed
+		AddItem(g.widgets[StartMonthDropDown],
+			0, 1,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[StartDayDropDown],
+			0, 2,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[StartHourDropDown],
+			0, 3,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[StartMinuteDropDown],
+			0, 4,
+			1, 1,
+			0, 100,
+			false).
+		// end date
+		AddItem(g.widgets[EndYearDropDown],
+			1, 0,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[EndMonthDropDown],
+			1, 1,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[EndDayDropDown],
+			1, 2,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[EndHourDropDown],
+			1, 3,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[EndMinuteDropDown],
+			1, 4,
+			1, 1,
+			0, 100,
+			false).
+		// aditional input
+		AddItem(g.widgets[FilterPaternInput],
+			2, 0,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[OutputFileInput],
+			2, 1,
+			1, 1,
+			0, 100,
+			false).
+		AddItem(g.widgets[SaveEventLogButton],
+			2, 2,
+			1, 1,
+			0, 100,
+			false).
+		// Log View
+		AddItem(g.widgets[ViewLog],
+			3, 0,
+			1, 5,
+			0, 100,
+			false)
+
+	// g.layouts[LogEventLayout] = tview.NewFlex().
+	// 	AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+	// 		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+	// 			// column direction
+	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+	// 				// row direction
+	// 				AddItem(g.widgets[StartYearDropDown], 0, 1, true).
+	// 				AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[StartDayDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[StartHourDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[StartMinuteDropDown], 0, 1, false),
+	// 				0, 10, true).
+	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+	// 				// row direction
+	// 				AddItem(g.widgets[EndYearDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[EndDayDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[EndHourDropDown], 0, 1, false).
+	// 				AddItem(g.widgets[EndMinuteDropDown], 0, 1, false),
+	// 				0, 10, false).
+	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+	// 				// row direction
+	// 				AddItem(g.widgets[FilterPaternInput], 0, 1, false).
+	// 				AddItem(g.widgets[OutputFileInput], 0, 1, false).
+	// 				AddItem(g.widgets[SaveEventLogButton], 0, 1, false),
+	// 				0, 1, false),
+	// 			0, 1, false).
+	// 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+	// 			AddItem(g.widgets[ViewLog], 0, 1, true),
+	// 			0, 10, false),
+	// 		0, 1, false)
 }
 
 func (g *gui) setLogEventWidget() {
@@ -213,11 +335,13 @@ func (g *gui) setLogEventWidget() {
 
 		g.widgets[key] = DropDown
 	}
-	g.widgets[FilterPaternInput] = tview.NewInputField().SetLabel("Filter Pattern")
+	g.widgets[FilterPaternInput] = tview.NewInputField().SetLabel("Write Filter Pattern")
 
-	g.widgets[OutputFileInput] = tview.NewInputField().SetLabel("Output File")
+	g.widgets[OutputFileInput] = tview.NewInputField().SetLabel("Write Output File")
 
-	g.widgets[SaveEventLogButton] = tview.NewButton("Save")
+	g.widgets[SaveEventLogButton] = tview.NewButton("Save Button")
+
+	g.widgets[ViewLog] = tview.NewTextView()
 }
 
 func (g *gui) setLogGroupLayout() {
@@ -311,8 +435,8 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 	row++
 
 	if aw.hasPrevLogGroup {
-		lgTable.SetCell(row, 0, tview.NewTableCell("Prev Page").
-			SetTextColor(tcell.ColorLightGreen).
+		lgTable.SetCell(row, 0, tview.NewTableCell(PrevPage).
+			SetTextColor(tcell.ColorLightSalmon).
 			SetMaxWidth(1).
 			SetExpansion(7))
 		row++
@@ -320,18 +444,19 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 
 	for _, lg := range aw.logGroups {
 		lgName := aws.ToString(lg.LogGroupName)
+		log.Println("lgName: ", lgName)
 		// int32 to string
 		retentionDays := fmt.Sprintf("%d", aws.ToInt32(lg.RetentionInDays))
 		storedBytes := fmt.Sprintf("%d", aws.ToInt64(lg.StoredBytes))
 		log.Println("storedBytes")
 		log.Println(storedBytes)
 
-		if g.logGroup.filterPatern != "*" {
-			if !strings.Contains(lgName, g.logGroup.filterPatern) {
-				continue
-			}
-		}
-
+		// if g.logGroup.filterPatern != "*" {
+		// 	if !strings.Contains(lgName, g.logGroup.filterPatern) {
+		// 		continue
+		// 	}
+		// }
+		//
 		lgTable.SetCell(row, 0, tview.NewTableCell(lgName).
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
@@ -351,8 +476,8 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 	}
 
 	if aw.hasNextLogGroup {
-		lgTable.SetCell(row, 0, tview.NewTableCell("Next Page").
-			SetTextColor(tcell.ColorLightGreen).
+		lgTable.SetCell(row, 0, tview.NewTableCell(NextPage).
+			SetTextColor(tcell.ColorLightSteelBlue).
 			SetMaxWidth(1).
 			SetExpansion(7))
 	}
@@ -382,10 +507,23 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 	row++
 
 	if aw.hasPrevLogStream {
-		lsTable.SetCell(row, 0, tview.NewTableCell("Prev Page").
+		lsTable.SetCell(row, 0, tview.NewTableCell("").
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
+			SetExpansion(1))
+		lsTable.SetCell(row, 1, tview.NewTableCell(PrevPage).
+			SetTextColor(tcell.ColorLightSalmon).
+			SetMaxWidth(1).
 			SetExpansion(7))
+		lsTable.SetCell(row, 2, tview.NewTableCell("").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
+
+		lsTable.SetCell(row, 3, tview.NewTableCell("").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
 		row++
 	}
 
@@ -417,11 +555,11 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 		firstEventTime := time.Unix(aws.ToInt64(ls.FirstEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
 		selectedMark := ""
 
-		if g.logStream.prefixPatern != "" {
-			if !strings.Contains(lsName, g.logStream.prefixPatern) {
-				continue
-			}
-		}
+		// if g.logStream.prefixPatern != "" {
+		// 	if !strings.Contains(lsName, g.logStream.prefixPatern) {
+		// 		continue
+		// 	}
+		// }
 
 		if slices.Contains(g.lEFrom.logStreamNames, lsName) {
 			selectedMark = "x"
@@ -452,30 +590,50 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 	}
 
 	if aw.hasNextLogStream {
-		lsTable.SetCell(row, 0, tview.NewTableCell("Next Page").
+		lsTable.SetCell(row, 0, tview.NewTableCell("").
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
+			SetExpansion(1))
+
+		lsTable.SetCell(row, 1, tview.NewTableCell(NextPage).
+			SetTextColor(tcell.ColorLightSteelBlue).
+			SetMaxWidth(1).
 			SetExpansion(7))
+
+		lsTable.SetCell(row, 2, tview.NewTableCell("").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
+
+		lsTable.SetCell(row, 3, tview.NewTableCell("").
+			SetTextColor(tcell.ColorLightGreen).
+			SetMaxWidth(1).
+			SetExpansion(2))
 	}
 }
 
 func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	lgTable := g.widgets[LogGroupTable].(*tview.Table)
 	lgSearch := g.widgets[LogGroupSearch].(*tview.InputField)
+	lsTable := g.widgets[LogStreamTable].(*tview.Table)
 
 	lgTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		max := lgTable.GetRowCount()
-		row, col := lgTable.GetSelection()
+		row, _ := lgTable.GetSelection()
 		switch event.Rune() {
 		case 'k':
 			// up
-			lgTable.Select((row)%max, col)
+			lgTable.Select((row)%max, 0)
 		case 'j':
 			// down
-			lgTable.Select((row)%max, col)
+			lgTable.Select((row)%max, 0)
 
 		case '/':
 			g.tvApp.SetFocus(lgSearch)
+		}
+
+		if event.Key() == tcell.KeyTab {
+			g.tvApp.SetFocus(lsTable)
 		}
 		return event
 	})
@@ -488,27 +646,28 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		log.Println("column ", column)
 		g.lEFrom.logGroupName = cell.Text
 		g.logStream.logGroupName = cell.Text
-		aw.getLogStreams(g)
+		aw.getLogStreams(g.logStream)
 		g.setLogStreamToGui(aw)
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
 	lgTable.SetSelectionChangedFunc(func(row, column int) {
-		cell := lgTable.GetCell(row, column)
-		if cell.Text == "Prev Page" {
-			g.logGroup.direction = Prev
-			aw.getLogGroups(g)
+		cell := lgTable.GetCell(row, 0)
+		log.Println("cell name", cell.Text, row, column)
+		if cell.Text == PrevPage {
 			lgTable.Clear()
+			g.logGroup.direction = Prev
+			aw.getLogGroups(g.logGroup)
 			g.setLogGroupToGui(aw)
-			lgTable.Select(lgTable.GetRowCount()-2, 1)
+			lgTable.Select(lgTable.GetRowCount()-2, 0)
 			log.Println("get row cont.......................", lgTable.GetRowCount())
 
-			// lgTable.Select(1, 1)
-		} else if cell.Text == "Next Page" {
-			g.logGroup.direction = Next
-			aw.getLogGroups(g)
+		} else if cell.Text == NextPage {
 			lgTable.Clear()
+			g.logGroup.direction = Next
+			aw.getLogGroups(g.logGroup)
+			log.Println("Next Page..............................")
 			g.setLogGroupToGui(aw)
-			lgTable.Select(1, 1)
+			lgTable.Select(2, 0)
 		}
 	})
 
@@ -526,8 +685,8 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	lgSearch.SetChangedFunc(func(filterPatern string) {
 		lgTable.Clear()
 		g.logGroup.filterPatern = filterPatern
-		g.logGroup.direction = Stay
-		aw.getLogGroups(g)
+		g.logGroup.direction = Home
+		aw.getLogGroups(g.logGroup)
 		g.setLogGroupToGui(aw)
 	})
 }
@@ -535,17 +694,18 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
 	lsSearch := g.widgets[LogStreamSearch].(*tview.InputField)
+	lgTable := g.widgets[LogGroupTable].(*tview.Table)
 
 	lsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		max := lsTable.GetRowCount()
-		row, col := lsTable.GetSelection()
+		row, _ := lsTable.GetSelection()
 		switch event.Rune() {
 		case 'k':
 			// up
-			lsTable.Select((row)%max, col)
+			lsTable.Select((row)%max, 1)
 		case 'j':
 			// down
-			lsTable.Select((row)%max, col)
+			lsTable.Select((row)%max, 1)
 
 		case '/':
 			g.tvApp.SetFocus(lsSearch)
@@ -579,11 +739,11 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 			log.Println("space")
 			return nil
 		}
-		log.Println(event.Key())
-		log.Println(event.Rune())
-		// translate rune to string
-		log.Println(string(event.Rune()))
-		log.Println("===========")
+
+		if event.Key() == tcell.KeyTab {
+			g.tvApp.SetFocus(lgTable)
+		}
+
 		return event
 	})
 
@@ -601,20 +761,20 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 	})
 
 	lsTable.SetSelectionChangedFunc(func(row, column int) {
-		cell := lsTable.GetCell(row, column)
-		if cell.Text == "Prev Page" {
+		cell := lsTable.GetCell(row, 1)
+		if cell.Text == PrevPage {
 			g.logStream.direction = Prev
-			aw.getLogStreams(g)
+			aw.getLogStreams(g.logStream)
 			lsTable.Clear()
 			g.setLogStreamToGui(aw)
 			lsTable.Select(lsTable.GetRowCount()-2, 1)
 			log.Println("get row cont.......................", lsTable.GetRowCount())
-		} else if cell.Text == "Next Page" {
+		} else if cell.Text == NextPage {
 			g.logStream.direction = Next
-			aw.getLogStreams(g)
+			aw.getLogStreams(g.logStream)
 			lsTable.Clear()
 			g.setLogStreamToGui(aw)
-			lsTable.Select(1, 1)
+			lsTable.Select(2, 1)
 		}
 	})
 
@@ -632,8 +792,8 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 	lsSearch.SetChangedFunc(func(prefixPatern string) {
 		lsTable.Clear()
 		g.logStream.prefixPatern = prefixPatern
-		g.logStream.direction = Stay
-		aw.getLogStreams(g)
+		g.logStream.direction = Home
+		aw.getLogStreams(g.logStream)
 		g.setLogStreamToGui(aw)
 	})
 }
@@ -674,17 +834,28 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		}
 		nowDropdown.
 			SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-				if nowDropdown.IsOpen() {
-					// switch event.Rune() {
-					// case 'k':
-					// 	// up
-					// 	nowDropdown.
-					// case 'j':
-					// 	// down
-					// }
+				// if nowDropdown.IsOpen() {
+				// 	return event
+				// }
 
-					return event
+				switch event.Rune() {
+				case 'k':
+					// up
+					max := nowDropdown.GetOptionCount()
+					idx, _ := nowDropdown.GetCurrentOption()
+					if idx >= 1 {
+						nowDropdown.SetCurrentOption((idx - 1) % max)
+					}
+
+				case 'j':
+					// down
+					max := nowDropdown.GetOptionCount()
+					idx, _ := nowDropdown.GetCurrentOption()
+					if idx < max-1 {
+						nowDropdown.SetCurrentOption((idx + 1) % max)
+					}
 				}
+
 				if event.Key() == tcell.KeyEsc {
 					g.tvApp.SetFocus(g.widgets[LogGroupTable])
 				} else if event.Key() == tcell.KeyTab {
@@ -710,26 +881,6 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 			})
 		}
 
-		g.widgets[FilterPaternInput].(*tview.InputField).
-			SetDoneFunc(func(key tcell.Key) {
-				if key == tcell.KeyTab {
-					g.tvApp.SetFocus(g.widgets[OutputFileInput])
-				}
-			}).
-			SetChangedFunc(func(text string) {
-				g.lEFrom.filterPatern = text
-			})
-
-		g.widgets[OutputFileInput].(*tview.InputField).
-			SetDoneFunc(func(key tcell.Key) {
-				if key == tcell.KeyTab {
-					g.tvApp.SetFocus(g.widgets[SaveEventLogButton])
-				}
-			}).
-			SetChangedFunc(func(text string) {
-				g.lEFrom.outputFile = text
-			})
-
 		// if event.Key() == tcell.KeyEsc {
 		// 	g.tvApp.SetFocus(g.widgets[logGroupList])
 		// }
@@ -738,6 +889,26 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		// 	g.tvApp.SetFocus(g.widgets[dropDowns[(i+1)%len(dropDowns)]])
 		// })
 	}
+	g.widgets[FilterPaternInput].(*tview.InputField).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyTab {
+				g.tvApp.SetFocus(g.widgets[OutputFileInput])
+			}
+		}).
+		SetChangedFunc(func(text string) {
+			g.lEFrom.filterPatern = text
+		})
+
+	g.widgets[OutputFileInput].(*tview.InputField).
+		SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyTab {
+				g.tvApp.SetFocus(g.widgets[SaveEventLogButton])
+			}
+		}).
+		SetChangedFunc(func(text string) {
+			g.lEFrom.outputFile = text
+		})
+
 	button := g.widgets[SaveEventLogButton].(*tview.Button)
 	button.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
@@ -745,6 +916,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		}
 		return event
 	})
+
 	button.SetSelectedFunc(func() {
 		result := g.makeFormResult()
 		aw.getLogEvents(result)

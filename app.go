@@ -26,7 +26,7 @@ func NewApp() *App {
 		gui: &gui{
 			tvApp:   tview.NewApplication(),
 			widgets: make(map[Widget]tview.Primitive),
-			layouts: make(map[Layout]*tview.Flex),
+			layouts: make(map[Layout]tview.Primitive),
 			lEFrom: &logEventForm{
 				startTimeSelected:  false,
 				endTimeSelected:    false,
@@ -34,21 +34,15 @@ func NewApp() *App {
 				enableOutputFile:   false,
 			},
 			logGroup: logGroup{
-				direction: Stay,
+				direction: Home,
 			},
 			logStream: logStream{
-				direction: Stay,
+				direction: Home,
 			},
-			// logGroup: &logGroup{
-			// 	filterPatern: "*",
-			// },
-			// logStream: &logStream{
-			// 	filterPatern: "*",
-			// },
 		},
 		awsr: &awsResource{
-			client: cwl.NewFromConfig(cfg),
-			pageTokensLogGroup: make(map[int]*string),
+			client:              cwl.NewFromConfig(cfg),
+			pageTokensLogGroup:  make(map[int]*string),
 			pageTokensLogStream: make(map[int]*string),
 		},
 	}
