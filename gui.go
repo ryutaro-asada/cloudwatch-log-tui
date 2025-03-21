@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"slices"
 	"strconv"
 	"time"
@@ -51,6 +52,7 @@ const (
 	FilterPaternInput
 	OutputFileInput
 	SaveEventLogButton
+	BackButton
 	ViewLog
 
 	Next Direction = iota
@@ -100,7 +102,7 @@ type gui struct {
 	// layouts   map[Layout]*tview.Flex
 	layouts   map[Layout]tview.Primitive
 	widgets   map[Widget]tview.Primitive
-	lEFrom    *logEventForm
+	lEForm    *logEventForm
 	logGroup  logGroup
 	logStream logStream
 
@@ -254,6 +256,11 @@ func (g *gui) setLogEventLayout() {
 			1, 1,
 			0, 100,
 			false).
+		AddItem(g.widgets[BackButton],
+			2, 3,
+			1, 1,
+			0, 100,
+			false).
 		// Log View
 		AddItem(g.widgets[ViewLog],
 			3, 0,
@@ -340,6 +347,7 @@ func (g *gui) setLogEventWidget() {
 	g.widgets[OutputFileInput] = tview.NewInputField().SetLabel("Write Output File")
 
 	g.widgets[SaveEventLogButton] = tview.NewButton("Save Button")
+	g.widgets[BackButton] = tview.NewButton("Back Button")
 
 	g.widgets[ViewLog] = tview.NewTextView()
 }
@@ -561,7 +569,7 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 		// 	}
 		// }
 
-		if slices.Contains(g.lEFrom.logStreamNames, lsName) {
+		if slices.Contains(g.lEForm.logStreamNames, lsName) {
 			selectedMark = "x"
 		}
 
@@ -644,7 +652,7 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		log.Println(cell.Text)
 		log.Println("row ", row)
 		log.Println("column ", column)
-		g.lEFrom.logGroupName = cell.Text
+		g.lEForm.logGroupName = cell.Text
 		g.logStream.logGroupName = cell.Text
 		aw.getLogStreams(g.logStream)
 		g.setLogStreamToGui(aw)
@@ -723,18 +731,18 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 			// log.Println(selectedMark)
 			lsTable.Clear()
 
-			switch slices.Contains(g.lEFrom.logStreamNames, logStreamName) {
+			switch slices.Contains(g.lEForm.logStreamNames, logStreamName) {
 			case true:
-				i := slices.Index(g.lEFrom.logStreamNames, logStreamName)
-				g.lEFrom.logStreamNames = slices.Delete(g.lEFrom.logStreamNames, i, i+1)
+				i := slices.Index(g.lEForm.logStreamNames, logStreamName)
+				g.lEForm.logStreamNames = slices.Delete(g.lEForm.logStreamNames, i, i+1)
 			case false:
-				g.lEFrom.logStreamNames = append(g.lEFrom.logStreamNames, logStreamName)
+				g.lEForm.logStreamNames = append(g.lEForm.logStreamNames, logStreamName)
 			}
 
 			g.setLogStreamToGui(aw)
 
 			log.Print("selected log stream names")
-			log.Print(g.lEFrom.logStreamNames)
+			log.Print(g.lEForm.logStreamNames)
 
 			log.Println("space")
 			return nil
@@ -751,11 +759,12 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 		cell := lsTable.GetCell(row, 1)
 		logStreamName := cell.Text
 		if logStreamName == "All Log Streams" {
-			g.lEFrom.logStreamNames = nil
+			g.lEForm.logStreamNames = nil
 		} else {
-			g.lEFrom.logStreamNames = append(g.lEFrom.logStreamNames, logStreamName)
-			g.lEFrom.logStreamNames = slices.Compact(g.lEFrom.logStreamNames)
+			g.lEForm.logStreamNames = append(g.lEForm.logStreamNames, logStreamName)
+			g.lEForm.logStreamNames = slices.Compact(g.lEForm.logStreamNames)
 		}
+		setDefaultDropDownValue(g)
 		g.pages.SwitchToPage(pageNames[LogEventPage])
 		g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 	})
@@ -896,7 +905,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 			}
 		}).
 		SetChangedFunc(func(text string) {
-			g.lEFrom.filterPatern = text
+			g.lEForm.filterPatern = text
 		})
 
 	g.widgets[OutputFileInput].(*tview.InputField).
@@ -906,25 +915,100 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 			}
 		}).
 		SetChangedFunc(func(text string) {
-			g.lEFrom.outputFile = text
+			g.lEForm.outputFile = text
 		})
 
-	button := g.widgets[SaveEventLogButton].(*tview.Button)
-	button.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	saveButton := g.widgets[SaveEventLogButton].(*tview.Button)
+	saveButton.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			g.tvApp.SetFocus(g.widgets[BackButton])
+		}
+		return event
+	})
+	saveButton.SetSelectedFunc(func() {
+		form := g.makeFormResult()
+		res := aw.getLogEvents(form)
+		textView := g.widgets[ViewLog].(*tview.TextView).Clear()
+
+		if len(res.Events) == 0 {
+			fmt.Fprintf(textView, "no events\n")
+			l := PrintStructFields(*g.lEForm)
+			for _, v := range l {
+				fmt.Fprintf(textView, "%s\n", v)
+			}
+			return
+		}
+
+		for _, event := range res.Events {
+			log.Println(aws.ToString(event.Message))
+			fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+			// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
+			// if err != nil {
+			// 	log.Fatalf("unable to write to file, %v", err)
+			// }
+		}
+	})
+
+	backButton := g.widgets[BackButton].(*tview.Button)
+	backButton.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			// g.tvApp.SetFocus(g.widgets[StartYearDropDown])
+			g.tvApp.SetFocus(g.widgets[ViewLog])
+		}
+		return event
+	})
+	backButton.SetSelectedFunc(func() {
+		g.pages.SwitchToPage(pageNames[LogGroupPage])
+		g.tvApp.SetFocus(g.widgets[LogGroupTable])
+	})
+
+	viewLog := g.widgets[ViewLog].(*tview.TextView)
+	viewLog.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
 			g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 		}
 		return event
 	})
+	viewLog.SetScrollable(true)
+}
 
-	button.SetSelectedFunc(func() {
-		result := g.makeFormResult()
-		aw.getLogEvents(result)
-	})
+// func PrintStructFields(s interface{}) []string {
+// 	val := reflect.ValueOf(s)
+// 	typ := reflect.TypeOf(s)
+//
+// 	list := make([]string, 0)
+// 	if typ.Kind() != reflect.Struct {
+// 		str := fmt.Sprintln("Provided data is not a struct.")
+// 		list = append(list, str)
+// 		return listっ
+// 	}
+//
+// 	for i := 0; i < typ.NumField(); i++ {
+// 		field := typ.Field(i)
+// 		value := val.Field(i)
+// 		str := fmt.Sprintf("%s: %v\n", field.Name, value)
+// 		list = append(list, str)
+// 	}
+// 	return list
+// }
+
+func PrintStructFields(s interface{}) []string {
+	typ := reflect.TypeOf(s)
+	val := reflect.ValueOf(s)
+
+	if typ.Kind() != reflect.Struct {
+		return []string{"Provided data is not a struct."}
+	}
+
+	list := make([]string, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		list[i] = fmt.Sprintf("%s: %v", typ.Field(i).Name, val.Field(i))
+	}
+	return list
 }
 
 func (g *gui) makeFormResult() logEventInut {
-	lef := g.lEFrom
+	lef := g.lEForm
 	for di, dd := range startDropDowns() {
 		nowDropdown := g.widgets[dd].(*tview.DropDown)
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
@@ -1000,25 +1084,25 @@ func (g *gui) makeFormResult() logEventInut {
 func (g *gui) inputForm(ddk Widget, text string) {
 	switch ddk {
 	case StartYearDropDown:
-		g.lEFrom.startYear = string2int(text)
+		g.lEForm.startYear = string2int(text)
 	case StartMonthDropDown:
-		g.lEFrom.startMonth = string2month(text)
+		g.lEForm.startMonth = string2month(text)
 	case StartDayDropDown:
-		g.lEFrom.startDay = string2int(text)
+		g.lEForm.startDay = string2int(text)
 	case StartHourDropDown:
-		g.lEFrom.startHour = string2int(text)
+		g.lEForm.startHour = string2int(text)
 	case StartMinuteDropDown:
-		g.lEFrom.startMinute = string2int(text)
+		g.lEForm.startMinute = string2int(text)
 	case EndYearDropDown:
-		g.lEFrom.endYear = string2int(text)
+		g.lEForm.endYear = string2int(text)
 	case EndMonthDropDown:
-		g.lEFrom.endMonth = string2month(text)
+		g.lEForm.endMonth = string2month(text)
 	case EndDayDropDown:
-		g.lEFrom.endDay = string2int(text)
+		g.lEForm.endDay = string2int(text)
 	case EndHourDropDown:
-		g.lEFrom.endHour = string2int(text)
+		g.lEForm.endHour = string2int(text)
 	case EndMinuteDropDown:
-		g.lEFrom.endMinute = string2int(text)
+		g.lEForm.endMinute = string2int(text)
 	}
 }
 
@@ -1036,4 +1120,33 @@ func string2month(s string) time.Month {
 		log.Fatalf("unable to list tables, %v", err)
 	}
 	return time.Month(i)
+}
+
+func setDefaultDropDownValue(g *gui) {
+	now := time.Now()
+
+	oneHourBefore := now.Add(-1 * time.Hour)
+	// oneHourBeforeYear := oneHourBefore.Year()
+	oneHourBeforeMonth := oneHourBefore.Month()
+	oneHourBeforeDay := oneHourBefore.Day()
+	oneHourBeforeHour := oneHourBefore.Hour()
+	oneHourBeforeMinute := oneHourBefore.Minute()
+
+	g.widgets[StartYearDropDown].(*tview.DropDown).SetCurrentOption(1)
+	g.widgets[StartMonthDropDown].(*tview.DropDown).SetCurrentOption(int(oneHourBeforeMonth) - 1)
+	g.widgets[StartDayDropDown].(*tview.DropDown).SetCurrentOption(oneHourBeforeDay - 1)
+	g.widgets[StartHourDropDown].(*tview.DropDown).SetCurrentOption(oneHourBeforeHour)
+	g.widgets[StartMinuteDropDown].(*tview.DropDown).SetCurrentOption(oneHourBeforeMinute)
+
+	// currentYear := now.Year()
+	currentMonth := now.Month()
+	currentDay := now.Day()
+	currentHour := now.Hour()
+	currentMinute := now.Minute()
+
+	g.widgets[EndYearDropDown].(*tview.DropDown).SetCurrentOption(1)
+	g.widgets[EndMonthDropDown].(*tview.DropDown).SetCurrentOption(int(currentMonth) - 1)
+	g.widgets[EndDayDropDown].(*tview.DropDown).SetCurrentOption(currentDay - 1)
+	g.widgets[EndHourDropDown].(*tview.DropDown).SetCurrentOption(currentHour)
+	g.widgets[EndMinuteDropDown].(*tview.DropDown).SetCurrentOption(currentMinute)
 }

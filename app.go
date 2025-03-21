@@ -27,7 +27,7 @@ func NewApp() *App {
 			tvApp:   tview.NewApplication(),
 			widgets: make(map[Widget]tview.Primitive),
 			layouts: make(map[Layout]tview.Primitive),
-			lEFrom: &logEventForm{
+			lEForm: &logEventForm{
 				startTimeSelected:  false,
 				endTimeSelected:    false,
 				enableFilterPatern: false,

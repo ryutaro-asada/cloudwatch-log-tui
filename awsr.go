@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bufio"
+	// "bufio"
 	"context"
 	"log"
-	"os"
+	// "os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -32,7 +32,7 @@ type awsResource struct {
 	client *cwl.Client
 }
 
-func (a *awsResource) getLogEvents(input logEventInut) {
+func (a *awsResource) getLogEvents(input logEventInut) *cwl.FilterLogEventsOutput {
 	// input := &cwl.FilterLogEventsInput{
 	// 	LogGroupName:  aws.String(lef.logGroupName),
 	// 	StartTime:     aws.Int64(startTime(lef)),
@@ -40,37 +40,44 @@ func (a *awsResource) getLogEvents(input logEventInut) {
 	// 	FilterPattern: aws.String(lef.filterPatern),
 	// }
 
-	paginator := cwl.NewFilterLogEventsPaginator(a.client, input.awsInput, func(o *cwl.FilterLogEventsPaginatorOptions) {
-		o.Limit = 10000
-	})
+	// paginator := cwl.NewFilterLogEventsPaginator(a.client, input.awsInput, func(o *cwl.FilterLogEventsPaginatorOptions) {
+	// 	o.Limit = 10000
+	// })
 
-	var outputFile string
-	if input.outputFile != "" {
-		outputFile = input.outputFile
-	} else {
-		outputFile = "app.log"
-	}
-	f, err := os.Create(outputFile)
+	res, err := a.client.FilterLogEvents(context.TODO(), input.awsInput)
 	if err != nil {
-		log.Fatalf("unable to create file, %v", err)
-	}
-	defer f.Close()
-	bf := bufio.NewWriter(f)
-	defer bf.Flush()
-
-	for paginator.HasMorePages() {
-		res, err := paginator.NextPage(context.TODO())
-		if err != nil {
 			log.Fatalf("unable to get next page, %v", err)
-		}
-
-		for _, event := range res.Events {
-			_, err = bf.WriteString(aws.ToString(event.Message) + "\n")
-			if err != nil {
-				log.Fatalf("unable to write to file, %v", err)
-			}
-		}
 	}
+		
+
+	// var outputFile string
+	// if input.outputFile != "" {
+	// 	outputFile = input.outputFile
+	// } else {
+	// 	outputFile = "app.log"
+	// }
+	// f, err := os.Create(outputFile)
+	// if err != nil {
+	// 	log.Fatalf("unable to create file, %v", err)
+	// }
+	// defer f.Close()
+	// bf := bufio.NewWriter(f)
+	// defer bf.Flush()
+	//
+	// for paginator.HasMorePages() {
+	// 	res, err := paginator.NextPage(context.TODO())
+	// 	if err != nil {
+	// 		log.Fatalf("unable to get next page, %v", err)
+	// 	}
+	//
+	// 	for _, event := range res.Events {
+	// 		_, err = bf.WriteString(aws.ToString(event.Message) + "\n")
+	// 		if err != nil {
+	// 			log.Fatalf("unable to write to file, %v", err)
+	// 		}
+	// 	}
+	// }
+	return res
 }
 
 func (a *awsResource) getLogGroups(lg logGroup) {
