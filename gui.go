@@ -28,6 +28,7 @@ const (
 	// Page names
 	LogGroupPage Page = iota
 	LogEventPage
+	ModalPage
 
 	// Layout names
 	LogGroupLayout Layout = iota
@@ -54,6 +55,7 @@ const (
 	SaveEventLogButton
 	BackButton
 	ViewLog
+	Modal
 
 	Next Direction = iota
 	Home
@@ -67,6 +69,7 @@ const (
 var pageNames = map[Page]string{
 	LogGroupPage: "logGroups",
 	LogEventPage: "logEvents",
+	ModalPage:    "modal",
 }
 
 var layoutNames = map[Layout]string{
@@ -93,7 +96,9 @@ var widgetNames = map[Widget]string{
 	FilterPaternInput:   "FilterPatern",
 	OutputFileInput:     "OutputFile",
 	SaveEventLogButton:  "SaveEventLog",
+	BackButton:          "Back",
 	ViewLog:             "ViewLog",
+	Modal:               "Modal",
 }
 
 type gui struct {
@@ -150,9 +155,15 @@ type logEventInut struct {
 func (g *gui) setGui(aw *awsResource) {
 	g.setLogGroupLayout()
 	g.setLogEventLayout()
+	g.widgets[Modal] = tview.NewModal().
+		SetText("Do you want to quit the application?").
+		AddButtons([]string{"Quit", "Cancel"})
 	g.pages = tview.NewPages().
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
-		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
+		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false).
+		AddPage(pageNames[ModalPage], g.widgets[Modal], false, false)
+	log.Println("setGui")
+	log.Println(g.pages)
 
 	g.setLogGroupToGui(aw)
 	g.setKeybinding(aw)
@@ -267,38 +278,6 @@ func (g *gui) setLogEventLayout() {
 			1, 5,
 			0, 100,
 			false)
-
-	// g.layouts[LogEventLayout] = tview.NewFlex().
-	// 	AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-	// 		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
-	// 			// column direction
-	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-	// 				// row direction
-	// 				AddItem(g.widgets[StartYearDropDown], 0, 1, true).
-	// 				AddItem(g.widgets[StartMonthDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[StartDayDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[StartHourDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[StartMinuteDropDown], 0, 1, false),
-	// 				0, 10, true).
-	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-	// 				// row direction
-	// 				AddItem(g.widgets[EndYearDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[EndMonthDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[EndDayDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[EndHourDropDown], 0, 1, false).
-	// 				AddItem(g.widgets[EndMinuteDropDown], 0, 1, false),
-	// 				0, 10, false).
-	// 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-	// 				// row direction
-	// 				AddItem(g.widgets[FilterPaternInput], 0, 1, false).
-	// 				AddItem(g.widgets[OutputFileInput], 0, 1, false).
-	// 				AddItem(g.widgets[SaveEventLogButton], 0, 1, false),
-	// 				0, 1, false),
-	// 			0, 1, false).
-	// 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-	// 			AddItem(g.widgets[ViewLog], 0, 1, true),
-	// 			0, 10, false),
-	// 		0, 1, false)
 }
 
 func (g *gui) setLogEventWidget() {
@@ -654,8 +633,32 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		log.Println("column ", column)
 		g.lEForm.logGroupName = cell.Text
 		g.logStream.logGroupName = cell.Text
+
+		// g.tvApp.QueueUpdateDraw(func() {
+		// 	g.pages.ShowPage(pageNames[ModalPage])
+		// 	// aw.getLogStreams(g.logStream)
+		// 	// g.setLogStreamToGui(aw)
+		// 	// g.pages.HidePage(pageNames[ModalPage])
+		// 	// g.tvApp.SetFocus(g.widgets[LogStreamTable])
+		// })
+		// g.pages.ShowPage(pageNames[ModalPage])
+		// g.pages.ShowPage(pageNames[ModalPage])
+		// g.pages.SwitchToPage(pageNames[ModalPage])
+		// g.pages.SwitchToPage(pageNames[LogEventPage])
+		// g.tvApp.SetFocus(g.widgets[Modal])
+
 		aw.getLogStreams(g.logStream)
 		g.setLogStreamToGui(aw)
+
+		// time.Sleep(3 * time.Second)
+		// g.pages.HidePage(pageNames[ModalPage])
+
+		// g.tvApp.QueueUpdateDraw(func() {
+		// 	g.pages.HidePage(pageNames[ModalPage])
+		// })
+
+		// g.pages.SwitchToPage(pageNames[LogGroupPage])
+
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
 	lgTable.SetSelectionChangedFunc(func(row, column int) {
@@ -869,6 +872,12 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 					g.tvApp.SetFocus(g.widgets[LogGroupTable])
 				} else if event.Key() == tcell.KeyTab {
 					g.tvApp.SetFocus(nextWidget)
+				} else if event.Key() == tcell.KeyEnter {
+					if nowDropdown.IsOpen() {
+						if i, _ := nowDropdown.GetCurrentOption(); i != -1 {
+							g.applyLogEvent(aw)
+						}
+					}
 				}
 				return event
 			})
@@ -906,6 +915,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		}).
 		SetChangedFunc(func(text string) {
 			g.lEForm.filterPatern = text
+			g.applyLogEvent(aw)
 		})
 
 	g.widgets[OutputFileInput].(*tview.InputField).
@@ -916,6 +926,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		}).
 		SetChangedFunc(func(text string) {
 			g.lEForm.outputFile = text
+			g.applyLogEvent(aw)
 		})
 
 	saveButton := g.widgets[SaveEventLogButton].(*tview.Button)
@@ -926,27 +937,34 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		return event
 	})
 	saveButton.SetSelectedFunc(func() {
-		form := g.makeFormResult()
-		res := aw.getLogEvents(form)
-		textView := g.widgets[ViewLog].(*tview.TextView).Clear()
-
-		if len(res.Events) == 0 {
-			fmt.Fprintf(textView, "no events\n")
-			l := PrintStructFields(*g.lEForm)
-			for _, v := range l {
-				fmt.Fprintf(textView, "%s\n", v)
-			}
-			return
-		}
-
-		for _, event := range res.Events {
-			log.Println(aws.ToString(event.Message))
-			fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
-			// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
-			// if err != nil {
-			// 	log.Fatalf("unable to write to file, %v", err)
-			// }
-		}
+		// textView := g.widgets[ViewLog].(*tview.TextView).Clear()
+		//
+		// form, err := g.makeFormResult()
+		// if err != nil {
+		// 	fmt.Fprintf(textView, "error: %v\n", err)
+		// 	return
+		// }
+		//
+		// res := aw.getLogEvents(form)
+		//
+		// if len(res.Events) == 0 {
+		// 	fmt.Fprintf(textView, "no events\n")
+		// 	l := PrintStructFields(*g.lEForm)
+		// 	for _, v := range l {
+		// 		fmt.Fprintf(textView, "%s\n", v)
+		// 	}
+		// 	return
+		// }
+		//
+		// for _, event := range res.Events {
+		// 	log.Println(aws.ToString(event.Message))
+		// 	fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+		// 	// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
+		// 	// if err != nil {
+		// 	// 	log.Fatalf("unable to write to file, %v", err)
+		// 	// }
+		// }
+		g.applyLogEvent(aw)
 	})
 
 	backButton := g.widgets[BackButton].(*tview.Button)
@@ -959,7 +977,7 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 	})
 	backButton.SetSelectedFunc(func() {
 		g.pages.SwitchToPage(pageNames[LogGroupPage])
-		g.tvApp.SetFocus(g.widgets[LogGroupTable])
+		g.tvApp.SetFocus(g.widgets[LogStreamTable])
 	})
 
 	viewLog := g.widgets[ViewLog].(*tview.TextView)
@@ -971,26 +989,6 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 	})
 	viewLog.SetScrollable(true)
 }
-
-// func PrintStructFields(s interface{}) []string {
-// 	val := reflect.ValueOf(s)
-// 	typ := reflect.TypeOf(s)
-//
-// 	list := make([]string, 0)
-// 	if typ.Kind() != reflect.Struct {
-// 		str := fmt.Sprintln("Provided data is not a struct.")
-// 		list = append(list, str)
-// 		return listっ
-// 	}
-//
-// 	for i := 0; i < typ.NumField(); i++ {
-// 		field := typ.Field(i)
-// 		value := val.Field(i)
-// 		str := fmt.Sprintf("%s: %v\n", field.Name, value)
-// 		list = append(list, str)
-// 	}
-// 	return list
-// }
 
 func PrintStructFields(s interface{}) []string {
 	typ := reflect.TypeOf(s)
@@ -1007,38 +1005,36 @@ func PrintStructFields(s interface{}) []string {
 	return list
 }
 
-func (g *gui) makeFormResult() logEventInut {
+func (g *gui) makeFormResult() (logEventInut, error) {
 	lef := g.lEForm
-	for di, dd := range startDropDowns() {
+	for _, dd := range startDropDowns() {
 		nowDropdown := g.widgets[dd].(*tview.DropDown)
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
-			break
+			return logEventInut{}, fmt.Errorf("start time is not selected")
 		}
-		if di == len(startDropDowns())-1 {
-			lef.startTimeSelected = true
-		}
+		// if di == len(startDropDowns())-1 {
+		// 	lef.startTimeSelected = true
+		// }
 	}
 
-	for di, dd := range endDropDowns() {
+	for _, dd := range endDropDowns() {
 		nowDropdown := g.widgets[dd].(*tview.DropDown)
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
-			break
+			return logEventInut{}, fmt.Errorf("end time is not selected")
 		}
-		if di == len(endDropDowns())-1 {
-			lef.endTimeSelected = true
-		}
+		// if di == len(endDropDowns())-1 {
+		// 	lef.endTimeSelected = true
+		// }
 	}
 
-	if lef.startTimeSelected && lef.endTimeSelected {
-		startTime := time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local)
-		endTime := time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local)
-		if startTime.After(endTime) {
-			log.Fatalf("start time is after end time")
-		}
+	startTimeInput := time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local)
+	endTimeInput := time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local)
+	if startTimeInput.After(endTimeInput) {
+		return logEventInut{}, fmt.Errorf("start time is after end time")
 	}
 
 	if lef.logGroupName == "" {
-		log.Fatalf("log group name is empty")
+		return logEventInut{}, fmt.Errorf("log group name is not selected")
 	}
 	if lef.filterPatern != "" {
 		lef.enableFilterPatern = true
@@ -1055,7 +1051,7 @@ func (g *gui) makeFormResult() logEventInut {
 			FilterPattern:  filterPattern(lef),
 		},
 		outputFile: lef.outputFile,
-	}
+	}, nil
 }
 
 // func (g *gui) logEventInput(lef *logEventForm) *cwl.FilterLogEventsInput {
@@ -1149,4 +1145,37 @@ func setDefaultDropDownValue(g *gui) {
 	g.widgets[EndDayDropDown].(*tview.DropDown).SetCurrentOption(currentDay - 1)
 	g.widgets[EndHourDropDown].(*tview.DropDown).SetCurrentOption(currentHour)
 	g.widgets[EndMinuteDropDown].(*tview.DropDown).SetCurrentOption(currentMinute)
+}
+
+func (g *gui) applyLogEvent(aw *awsResource) {
+	log.Println("applyLogEvent.................................")
+	textView := g.widgets[ViewLog].(*tview.TextView).Clear()
+	fmt.Sprintln(textView, "Now Loading... ")
+
+	form, err := g.makeFormResult()
+	if err != nil {
+		fmt.Fprintf(textView, "error: %v\n", err)
+		return
+	}
+
+	res := aw.getLogEvents(form)
+
+	if len(res.Events) == 0 {
+		fmt.Fprintf(textView, "no events\n")
+		l := PrintStructFields(*g.lEForm)
+		for _, v := range l {
+			fmt.Fprintf(textView, "%s\n", v)
+		}
+		return
+	}
+
+	textView.Clear()
+	for _, event := range res.Events {
+		// log.Println(aws.ToString(event.Message))
+		fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+		// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
+		// if err != nil {
+		// 	log.Fatalf("unable to write to file, %v", err)
+		// }
+	}
 }
