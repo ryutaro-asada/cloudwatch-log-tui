@@ -15,7 +15,7 @@ func main() {
 	log.SetOutput(f)
 
 	app := NewApp()
-	app.awsr.getLogGroups()
+	app.awsr.getLogGroups(app.gui.logGroup)
 	app.gui.setGui(app.awsr)
 	app.Run()
 }
