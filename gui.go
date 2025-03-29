@@ -1013,7 +1013,6 @@ func (g *gui) applyLogEvent(aw *awsResource) {
 	fmt.Fprintln(textView, "Now Loading... ")
 
 	go func() {
-		time.Sleep(3 * time.Second)
 		res, err := aw.getLogEvents(form)
 		g.tvApp.QueueUpdateDraw(func() {
 			if err != nil {
