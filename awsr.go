@@ -32,52 +32,12 @@ type awsResource struct {
 	client *cwl.Client
 }
 
-func (a *awsResource) getLogEvents(input logEventInut) *cwl.FilterLogEventsOutput {
-	// input := &cwl.FilterLogEventsInput{
-	// 	LogGroupName:  aws.String(lef.logGroupName),
-	// 	StartTime:     aws.Int64(startTime(lef)),
-	// 	EndTime:       aws.Int64(endTime(lef)),
-	// 	FilterPattern: aws.String(lef.filterPatern),
-	// }
-
-	// paginator := cwl.NewFilterLogEventsPaginator(a.client, input.awsInput, func(o *cwl.FilterLogEventsPaginatorOptions) {
-	// 	o.Limit = 10000
-	// })
-
+func (a *awsResource) getLogEvents(input logEventInut) (*cwl.FilterLogEventsOutput, error) {
 	res, err := a.client.FilterLogEvents(context.TODO(), input.awsInput)
 	if err != nil {
-			log.Fatalf("unable to get next page, %v", err)
+		return nil, err
 	}
-		
-
-	// var outputFile string
-	// if input.outputFile != "" {
-	// 	outputFile = input.outputFile
-	// } else {
-	// 	outputFile = "app.log"
-	// }
-	// f, err := os.Create(outputFile)
-	// if err != nil {
-	// 	log.Fatalf("unable to create file, %v", err)
-	// }
-	// defer f.Close()
-	// bf := bufio.NewWriter(f)
-	// defer bf.Flush()
-	//
-	// for paginator.HasMorePages() {
-	// 	res, err := paginator.NextPage(context.TODO())
-	// 	if err != nil {
-	// 		log.Fatalf("unable to get next page, %v", err)
-	// 	}
-	//
-	// 	for _, event := range res.Events {
-	// 		_, err = bf.WriteString(aws.ToString(event.Message) + "\n")
-	// 		if err != nil {
-	// 			log.Fatalf("unable to write to file, %v", err)
-	// 		}
-	// 	}
-	// }
-	return res
+	return res, nil
 }
 
 func (a *awsResource) getLogGroups(lg logGroup) {
@@ -98,7 +58,6 @@ func (a *awsResource) getLogGroups(lg logGroup) {
 
 	// TODO: add test
 	if filterPatern != "" {
-		log.Printf("filterPatern: %s", filterPatern)
 		params.LogGroupNamePattern = aws.String(filterPatern)
 	}
 
@@ -131,7 +90,6 @@ func (a *awsResource) getLogGroups(lg logGroup) {
 	case Prev:
 		a.currentPageLogGroup--
 	}
-	log.Printf("currentPageLogGroup: %d", a.currentPageLogGroup)
 
 	// TODO: add test
 	if res.NextToken != nil && len(res.LogGroups) == int(maxItemsInPage) {
@@ -169,7 +127,6 @@ func (a *awsResource) getLogStreams(ls logStream) {
 
 	// TODO: add test
 	if prefixPatern != "" {
-		log.Printf("prefixPatern: %s", prefixPatern)
 		params.LogStreamNamePrefix = aws.String(prefixPatern)
 	}
 
@@ -199,7 +156,6 @@ func (a *awsResource) getLogStreams(ls logStream) {
 	case Prev:
 		a.currentPageLogStream--
 	}
-	log.Printf("currentPageLogGroup: %d", a.currentPageLogStream)
 
 	// TODO: add test
 	if res.NextToken != nil && len(res.LogStreams) == int(maxItemsInPage) {

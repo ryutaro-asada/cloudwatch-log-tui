@@ -102,17 +102,13 @@ var widgetNames = map[Widget]string{
 }
 
 type gui struct {
-	tvApp *tview.Application
-	pages *tview.Pages
-	// layouts   map[Layout]*tview.Flex
+	tvApp     *tview.Application
+	pages     *tview.Pages
 	layouts   map[Layout]tview.Primitive
 	widgets   map[Widget]tview.Primitive
 	lEForm    *logEventForm
 	logGroup  logGroup
 	logStream logStream
-
-	// logGroupFuncs map[string]func()
-	// logEventFuncs map[string]func()
 }
 
 type logGroup struct {
@@ -162,35 +158,12 @@ func (g *gui) setGui(aw *awsResource) {
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
 		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false).
 		AddPage(pageNames[ModalPage], g.widgets[Modal], false, false)
-	log.Println("setGui")
-	log.Println(g.pages)
 
-	g.setLogGroupToGui(aw)
 	g.setKeybinding(aw)
 }
 
 func (g *gui) setLogEventLayout() {
 	g.setLogEventWidget()
-	// newPrimitive := func(text string) tview.Primitive {
-	// 	return tview.NewTextView().
-	// 		SetTextAlign(tview.AlignCenter).
-	// 		SetText(text)
-	// }
-
-	// g.layouts[LogEventLayout] = tview.NewGrid().
-	// 	SetRows(3, 0).
-	// 	SetColumns(0).
-	// 	SetBorders(true).
-	// 	AddItem(tview.NewGrid().
-	// 		SetRows(0, 0, 0).
-	// 		SetColumns(0, 0, 0, 0, 0).
-	// 		SetBorders(true).
-	// 		AddItem(newPrimitive("Menu"), 0, 0, 1, 1, 0, 100, false).
-	// 		AddItem(newPrimitive("Menu"), 0, 1, 1, 1, 0, 100, false).
-	// 		AddItem(newPrimitive("Menu"), 0, 2, 1, 1, 0, 100, false).
-	// 		AddItem(newPrimitive("Menu"), 0, 3, 1, 1, 0, 100, false).
-	// 		AddItem(newPrimitive("Menu"), 0, 4, 1, 1, 0, 100, false),
-	// 		0, 0, 1, 3, 0, 0, false)
 	g.layouts[LogEventLayout] = tview.NewGrid().
 		SetRows(
 			// drop down options
@@ -344,11 +317,6 @@ func (g *gui) setLogGroupLayout() {
 }
 
 func (g *gui) setLogGroupWidget() {
-	// list := tview.NewList().ShowSecondaryText(false)
-	// list.SetBorder(true)
-	// list.SetTitle("Log Groups")
-	// g.widgets[LogGroupTable] = list
-
 	table := tview.NewTable().
 		SetSelectable(true, false).
 		Select(0, 0).
@@ -370,10 +338,6 @@ func (g *gui) setLogGroupWidget() {
 }
 
 func (g *gui) setLogStreamWidget() {
-	// list := tview.NewList().ShowSecondaryText(false)
-	// list.SetBorder(true)
-	// list.SetTitle("Log Streams")
-
 	table := tview.NewTable().
 		SetSelectable(true, false).
 		Select(0, 0).
@@ -431,19 +395,10 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 
 	for _, lg := range aw.logGroups {
 		lgName := aws.ToString(lg.LogGroupName)
-		log.Println("lgName: ", lgName)
 		// int32 to string
 		retentionDays := fmt.Sprintf("%d", aws.ToInt32(lg.RetentionInDays))
 		storedBytes := fmt.Sprintf("%d", aws.ToInt64(lg.StoredBytes))
-		log.Println("storedBytes")
-		log.Println(storedBytes)
 
-		// if g.logGroup.filterPatern != "*" {
-		// 	if !strings.Contains(lgName, g.logGroup.filterPatern) {
-		// 		continue
-		// 	}
-		// }
-		//
 		lgTable.SetCell(row, 0, tview.NewTableCell(lgName).
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
@@ -542,12 +497,6 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 		firstEventTime := time.Unix(aws.ToInt64(ls.FirstEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
 		selectedMark := ""
 
-		// if g.logStream.prefixPatern != "" {
-		// 	if !strings.Contains(lsName, g.logStream.prefixPatern) {
-		// 		continue
-		// 	}
-		// }
-
 		if slices.Contains(g.lEForm.logStreamNames, lsName) {
 			selectedMark = "x"
 		}
@@ -627,56 +576,31 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 
 	lgTable.SetSelectedFunc(func(row, column int) {
 		cell := lgTable.GetCell(row, 0)
-		log.Println("cell name")
-		log.Println(cell.Text)
-		log.Println("row ", row)
-		log.Println("column ", column)
 		g.lEForm.logGroupName = cell.Text
 		g.logStream.logGroupName = cell.Text
-
-		// g.tvApp.QueueUpdateDraw(func() {
-		// 	g.pages.ShowPage(pageNames[ModalPage])
-		// 	// aw.getLogStreams(g.logStream)
-		// 	// g.setLogStreamToGui(aw)
-		// 	// g.pages.HidePage(pageNames[ModalPage])
-		// 	// g.tvApp.SetFocus(g.widgets[LogStreamTable])
-		// })
-		// g.pages.ShowPage(pageNames[ModalPage])
-		// g.pages.ShowPage(pageNames[ModalPage])
-		// g.pages.SwitchToPage(pageNames[ModalPage])
-		// g.pages.SwitchToPage(pageNames[LogEventPage])
-		// g.tvApp.SetFocus(g.widgets[Modal])
-
-		aw.getLogStreams(g.logStream)
-		g.setLogStreamToGui(aw)
-
-		// time.Sleep(3 * time.Second)
-		// g.pages.HidePage(pageNames[ModalPage])
-
-		// g.tvApp.QueueUpdateDraw(func() {
-		// 	g.pages.HidePage(pageNames[ModalPage])
-		// })
-
-		// g.pages.SwitchToPage(pageNames[LogGroupPage])
-
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
+		go func() {
+			aw.getLogStreams(g.logStream)
+			g.tvApp.QueueUpdateDraw(func() {
+				g.setLogStreamToGui(aw)
+			})
+		}()
 	})
+
 	lgTable.SetSelectionChangedFunc(func(row, column int) {
 		cell := lgTable.GetCell(row, 0)
-		log.Println("cell name", cell.Text, row, column)
-		if cell.Text == PrevPage {
+		switch cell.Text {
+		case PrevPage:
 			lgTable.Clear()
 			g.logGroup.direction = Prev
 			aw.getLogGroups(g.logGroup)
 			g.setLogGroupToGui(aw)
 			lgTable.Select(lgTable.GetRowCount()-2, 0)
-			log.Println("get row cont.......................", lgTable.GetRowCount())
 
-		} else if cell.Text == NextPage {
+		case NextPage:
 			lgTable.Clear()
 			g.logGroup.direction = Next
 			aw.getLogGroups(g.logGroup)
-			log.Println("Next Page..............................")
 			g.setLogGroupToGui(aw)
 			lgTable.Select(2, 0)
 		}
@@ -694,11 +618,15 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		return event
 	})
 	lgSearch.SetChangedFunc(func(filterPatern string) {
-		lgTable.Clear()
 		g.logGroup.filterPatern = filterPatern
 		g.logGroup.direction = Home
-		aw.getLogGroups(g.logGroup)
-		g.setLogGroupToGui(aw)
+		go func() {
+			aw.getLogGroups(g.logGroup)
+			g.tvApp.QueueUpdateDraw(func() {
+				lgTable.Clear()
+				g.setLogGroupToGui(aw)
+			})
+		}()
 	})
 }
 
@@ -725,13 +653,9 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 
 			cell := lsTable.GetCell(row, 1)
 			logStreamName := cell.Text
-			log.Println("selected log stream name")
-			log.Println(logStreamName)
 			if logStreamName == "All Log Streams" {
 				return nil
 			}
-			log.Println(logStreamName)
-			// log.Println(selectedMark)
 			lsTable.Clear()
 
 			switch slices.Contains(g.lEForm.logStreamNames, logStreamName) {
@@ -744,10 +668,6 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 
 			g.setLogStreamToGui(aw)
 
-			log.Print("selected log stream names")
-			log.Print(g.lEForm.logStreamNames)
-
-			log.Println("space")
 			return nil
 		}
 
@@ -774,14 +694,15 @@ func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 
 	lsTable.SetSelectionChangedFunc(func(row, column int) {
 		cell := lsTable.GetCell(row, 1)
-		if cell.Text == PrevPage {
+		switch cell.Text {
+		case PrevPage:
 			g.logStream.direction = Prev
 			aw.getLogStreams(g.logStream)
 			lsTable.Clear()
 			g.setLogStreamToGui(aw)
 			lsTable.Select(lsTable.GetRowCount()-2, 1)
-			log.Println("get row cont.......................", lsTable.GetRowCount())
-		} else if cell.Text == NextPage {
+
+		case NextPage:
 			g.logStream.direction = Next
 			aw.getLogStreams(g.logStream)
 			lsTable.Clear()
@@ -846,10 +767,6 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		}
 		nowDropdown.
 			SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-				// if nowDropdown.IsOpen() {
-				// 	return event
-				// }
-
 				switch event.Rune() {
 				case 'k':
 					// up
@@ -898,14 +815,6 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 				g.inputForm(name, text)
 			})
 		}
-
-		// if event.Key() == tcell.KeyEsc {
-		// 	g.tvApp.SetFocus(g.widgets[logGroupList])
-		// }
-
-		// SetSelectedFunc(func(text string, index int) {
-		// 	g.tvApp.SetFocus(g.widgets[dropDowns[(i+1)%len(dropDowns)]])
-		// })
 	}
 	g.widgets[FilterPaternInput].(*tview.InputField).
 		SetDoneFunc(func(key tcell.Key) {
@@ -937,40 +846,12 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		return event
 	})
 	saveButton.SetSelectedFunc(func() {
-		// textView := g.widgets[ViewLog].(*tview.TextView).Clear()
-		//
-		// form, err := g.makeFormResult()
-		// if err != nil {
-		// 	fmt.Fprintf(textView, "error: %v\n", err)
-		// 	return
-		// }
-		//
-		// res := aw.getLogEvents(form)
-		//
-		// if len(res.Events) == 0 {
-		// 	fmt.Fprintf(textView, "no events\n")
-		// 	l := PrintStructFields(*g.lEForm)
-		// 	for _, v := range l {
-		// 		fmt.Fprintf(textView, "%s\n", v)
-		// 	}
-		// 	return
-		// }
-		//
-		// for _, event := range res.Events {
-		// 	log.Println(aws.ToString(event.Message))
-		// 	fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
-		// 	// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
-		// 	// if err != nil {
-		// 	// 	log.Fatalf("unable to write to file, %v", err)
-		// 	// }
-		// }
 		g.applyLogEvent(aw)
 	})
 
 	backButton := g.widgets[BackButton].(*tview.Button)
 	backButton.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			// g.tvApp.SetFocus(g.widgets[StartYearDropDown])
 			g.tvApp.SetFocus(g.widgets[ViewLog])
 		}
 		return event
@@ -1012,9 +893,6 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
 			return logEventInut{}, fmt.Errorf("start time is not selected")
 		}
-		// if di == len(startDropDowns())-1 {
-		// 	lef.startTimeSelected = true
-		// }
 	}
 
 	for _, dd := range endDropDowns() {
@@ -1022,9 +900,6 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
 			return logEventInut{}, fmt.Errorf("end time is not selected")
 		}
-		// if di == len(endDropDowns())-1 {
-		// 	lef.endTimeSelected = true
-		// }
 	}
 
 	startTimeInput := time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local)
@@ -1053,29 +928,6 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 		outputFile: lef.outputFile,
 	}, nil
 }
-
-// func (g *gui) logEventInput(lef *logEventForm) *cwl.FilterLogEventsInput {
-// 	if lef.startTimeSelected && lef.endTimeSelected && lef.enableFilterPatern {
-// 		return &cwl.FilterLogEventsInput{
-// 			LogGroupName:  aws.String(lef.logGroupName),
-// 			StartTime:     aws.Int64(startTime(lef)),
-// 			EndTime:       aws.Int64(endTime(lef)),
-// 			FilterPattern: aws.String(lef.filterPatern),
-// 		}
-// 	} else if lef.startTimeSelected && lef.endTimeSelected && !lef.enableFilterPatern {
-// 		return &cwl.FilterLogEventsInput{
-// 			LogGroupName:  aws.String(lef.logGroupName),
-// 			StartTime:     aws.Int64(startTime(lef)),
-// 			EndTime:       aws.Int64(endTime(lef)),
-// 		}
-// 	} else if lef.startTimeSelected && lef.endTimeSelected && !lef.enableFilterPatern {
-// 		return &cwl.FilterLogEventsInput{
-// 			LogGroupName:  aws.String(lef.logGroupName),
-// 			StartTime:     aws.Int64(startTime(lef)),
-// 			EndTime:       aws.Int64(endTime(lef)),
-// 		}
-// 	}
-// }
 
 func (g *gui) inputForm(ddk Widget, text string) {
 	switch ddk {
@@ -1148,34 +1000,41 @@ func setDefaultDropDownValue(g *gui) {
 }
 
 func (g *gui) applyLogEvent(aw *awsResource) {
-	log.Println("applyLogEvent.................................")
-	textView := g.widgets[ViewLog].(*tview.TextView).Clear()
-	fmt.Sprintln(textView, "Now Loading... ")
+	textView := g.widgets[ViewLog].(*tview.TextView)
 
 	form, err := g.makeFormResult()
 	if err != nil {
+		textView.Clear()
 		fmt.Fprintf(textView, "error: %v\n", err)
 		return
 	}
 
-	res := aw.getLogEvents(form)
-
-	if len(res.Events) == 0 {
-		fmt.Fprintf(textView, "no events\n")
-		l := PrintStructFields(*g.lEForm)
-		for _, v := range l {
-			fmt.Fprintf(textView, "%s\n", v)
-		}
-		return
-	}
-
 	textView.Clear()
-	for _, event := range res.Events {
-		// log.Println(aws.ToString(event.Message))
-		fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
-		// _, err = bf.WriteString(aws.ToString(event.Message) + "\n")
-		// if err != nil {
-		// 	log.Fatalf("unable to write to file, %v", err)
-		// }
-	}
+	fmt.Fprintln(textView, "Now Loading... ")
+
+	go func() {
+		time.Sleep(3 * time.Second)
+		res, err := aw.getLogEvents(form)
+		g.tvApp.QueueUpdateDraw(func() {
+			if err != nil {
+				textView.Clear()
+				fmt.Fprintf(textView, "error: %v\n", err)
+				return
+			}
+			if len(res.Events) == 0 {
+				textView.Clear()
+				fmt.Fprintf(textView, "no events\n")
+				l := PrintStructFields(*g.lEForm)
+				for _, v := range l {
+					fmt.Fprintf(textView, "%s\n", v)
+				}
+				return
+			}
+
+			textView.Clear()
+			for _, event := range res.Events {
+				fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+			}
+		})
+	}()
 }

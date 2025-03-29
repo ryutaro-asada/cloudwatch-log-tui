@@ -15,8 +15,12 @@ func main() {
 	log.SetOutput(f)
 
 	app := NewApp()
-	app.awsr.getLogGroups(app.gui.logGroup)
 	app.gui.setGui(app.awsr)
+	go func() {
+		app.awsr.getLogGroups(app.gui.logGroup)
+		app.gui.tvApp.QueueUpdateDraw(func() {
+			app.gui.setLogGroupToGui(app.awsr)
+		})
+	}()
 	app.Run()
 }
-
