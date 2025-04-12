@@ -28,7 +28,7 @@ const (
 	// Page names
 	LogGroupPage Page = iota
 	LogEventPage
-	ModalPage
+	// ModalPage
 
 	// Layout names
 	LogGroupLayout Layout = iota
@@ -55,7 +55,7 @@ const (
 	SaveEventLogButton
 	BackButton
 	ViewLog
-	Modal
+	// Modal
 
 	Next Direction = iota
 	Home
@@ -69,7 +69,7 @@ const (
 var pageNames = map[Page]string{
 	LogGroupPage: "logGroups",
 	LogEventPage: "logEvents",
-	ModalPage:    "modal",
+	// ModalPage:    "modal",
 }
 
 var layoutNames = map[Layout]string{
@@ -98,7 +98,7 @@ var widgetNames = map[Widget]string{
 	SaveEventLogButton:  "SaveEventLog",
 	BackButton:          "Back",
 	ViewLog:             "ViewLog",
-	Modal:               "Modal",
+	// Modal:               "Modal",
 }
 
 type gui struct {
@@ -149,13 +149,13 @@ type logEventInut struct {
 func (g *gui) setGui(aw *awsResource) {
 	g.setLogGroupLayout()
 	g.setLogEventLayout()
-	g.widgets[Modal] = tview.NewModal().
-		SetText("Do you want to quit the application?").
-		AddButtons([]string{"Quit", "Cancel"})
+	// g.widgets[Modal] = tview.NewModal().
+	// 	SetText("Do you want to quit the application?").
+	// 	AddButtons([]string{"Quit", "Cancel"})
 	g.pages = tview.NewPages().
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
-		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false).
-		AddPage(pageNames[ModalPage], g.widgets[Modal], false, false)
+		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
+		// AddPage(pageNames[ModalPage], g.widgets[Modal], false, false)
 
 	g.setKeybinding(aw)
 }
@@ -1039,8 +1039,8 @@ func (g *gui) applyLogEvent(aw *awsResource) {
 			}
 
 			textView.Clear()
+			printInputForm(*g.lEForm, textView)
 			for _, event := range res.Events {
-				printInputForm(*g.lEForm, textView)
 				fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
 			}
 		})
