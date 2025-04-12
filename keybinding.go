@@ -367,30 +367,30 @@ func PrintStructFields(s interface{}) []string {
 	return list
 }
 
-func (g *gui) makeFormResult() (logEventInut, error) {
+func (g *gui) makeFormResult() (logEventInput, error) {
 	lef := g.lEForm
 	for _, dd := range startDropDowns() {
 		nowDropdown := g.widgets[dd].(*tview.DropDown)
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
-			return logEventInut{}, fmt.Errorf("start time is not selected")
+			return logEventInput{}, fmt.Errorf("start time is not selected")
 		}
 	}
 
 	for _, dd := range endDropDowns() {
 		nowDropdown := g.widgets[dd].(*tview.DropDown)
 		if oi, _ := nowDropdown.GetCurrentOption(); oi == -1 {
-			return logEventInut{}, fmt.Errorf("end time is not selected")
+			return logEventInput{}, fmt.Errorf("end time is not selected")
 		}
 	}
 
 	startTimeInput := time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local)
 	endTimeInput := time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local)
 	if startTimeInput.After(endTimeInput) {
-		return logEventInut{}, fmt.Errorf("start time is after end time")
+		return logEventInput{}, fmt.Errorf("start time is after end time")
 	}
 
 	if lef.logGroupName == "" {
-		return logEventInut{}, fmt.Errorf("log group name is not selected")
+		return logEventInput{}, fmt.Errorf("log group name is not selected")
 	}
 
 	var filterPatern *string
@@ -400,7 +400,7 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 	if lef.outputFile != "" {
 		lef.enableOutputFile = true
 	}
-	return logEventInut{
+	return logEventInput{
 		awsInput: &cwl.FilterLogEventsInput{
 			LogGroupName:   aws.String(lef.logGroupName),
 			LogStreamNames: lef.logStreamNames,

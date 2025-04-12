@@ -32,7 +32,7 @@ type awsResource struct {
 	client *cwl.Client
 }
 
-func (a *awsResource) getLogEvents(input logEventInut) (*cwl.FilterLogEventsOutput, error) {
+func (a *awsResource) getLogEvents(input logEventInput) (*cwl.FilterLogEventsOutput, error) {
 	res, err := a.client.FilterLogEvents(context.TODO(), input.awsInput)
 	if err != nil {
 		return nil, err
