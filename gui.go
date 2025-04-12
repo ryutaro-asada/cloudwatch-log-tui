@@ -123,13 +123,11 @@ type logStream struct {
 }
 
 type logEventForm struct {
-	startTimeSelected  bool
 	startYear          int
 	startMonth         time.Month
 	startDay           int
 	startHour          int
 	startMinute        int
-	endTimeSelected    bool
 	endYear            int
 	endMonth           time.Month
 	endDay             int
@@ -803,15 +801,24 @@ func (g *gui) setLogEventKeybinding(aw *awsResource) {
 		case StartMonthDropDown:
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
 				g.inputForm(name, text)
-				g.widgets[StartDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil)
+				g.widgets[StartDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil).SetSelectedFunc(func(text string, index int) {
+					// log.Println(".......in start day Selected:", text, index)
+					// log.Println(".......in start day Selected:", name)
+					g.inputForm(StartDayDropDown, text)
+				})
 			})
 		case EndMonthDropDown:
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
 				g.inputForm(name, text)
-				g.widgets[EndDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil)
+				g.widgets[EndDayDropDown].(*tview.DropDown).SetOptions(getDaysByMonth(text), nil).SetSelectedFunc(func(text string, index int) {
+					// log.Println("....... in end day Selected:", text, index)
+					g.inputForm(EndDayDropDown, text)
+				})
 			})
 		default:
+			// log.Println("..name:", name)
 			nowDropdown.SetSelectedFunc(func(text string, index int) {
+				// log.Println(".......Selected:", text, index)
 				g.inputForm(name, text)
 			})
 		}
@@ -911,8 +918,10 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 	if lef.logGroupName == "" {
 		return logEventInut{}, fmt.Errorf("log group name is not selected")
 	}
+
+	var filterPatern *string
 	if lef.filterPatern != "" {
-		lef.enableFilterPatern = true
+		filterPatern = aws.String(lef.filterPatern)
 	}
 	if lef.outputFile != "" {
 		lef.enableOutputFile = true
@@ -921,9 +930,9 @@ func (g *gui) makeFormResult() (logEventInut, error) {
 		awsInput: &cwl.FilterLogEventsInput{
 			LogGroupName:   aws.String(lef.logGroupName),
 			LogStreamNames: lef.logStreamNames,
-			StartTime:      startTime(lef),
-			EndTime:        endTime(lef),
-			FilterPattern:  filterPattern(lef),
+			StartTime:      aws.Int64(startTimeInput.UnixMilli()),
+			EndTime:        aws.Int64(endTimeInput.UnixMilli()),
+			FilterPattern:  filterPatern,
 		},
 		outputFile: lef.outputFile,
 	}, nil
@@ -936,7 +945,9 @@ func (g *gui) inputForm(ddk Widget, text string) {
 	case StartMonthDropDown:
 		g.lEForm.startMonth = string2month(text)
 	case StartDayDropDown:
+		log.Println(".......in start day 1:", text)
 		g.lEForm.startDay = string2int(text)
+		log.Println(".......in start day 2:", g.lEForm.startDay)
 	case StartHourDropDown:
 		g.lEForm.startHour = string2int(text)
 	case StartMinuteDropDown:
@@ -1023,17 +1034,38 @@ func (g *gui) applyLogEvent(aw *awsResource) {
 			if len(res.Events) == 0 {
 				textView.Clear()
 				fmt.Fprintf(textView, "no events\n")
-				l := PrintStructFields(*g.lEForm)
-				for _, v := range l {
-					fmt.Fprintf(textView, "%s\n", v)
-				}
+				printInputForm(*g.lEForm, textView)
 				return
 			}
 
 			textView.Clear()
 			for _, event := range res.Events {
+				printInputForm(*g.lEForm, textView)
 				fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
 			}
 		})
 	}()
+}
+
+func printInputForm(form logEventForm, textView *tview.TextView) {
+	fmt.Fprintf(textView, "Your setting is\n")
+	fmt.Fprintf(textView, "%s\n", form.logGroupName)
+	fmt.Fprintf(textView, "%s\n", form.logStreamNames)
+	fmt.Fprintf(textView, "%s\n", form.filterPatern)
+
+	fmt.Fprintf(textView, "%s/%s/%s %s:%s\n",
+		strconv.Itoa(form.startYear),
+		strconv.Itoa(int(form.startMonth)),
+		strconv.Itoa(form.startDay),
+		strconv.Itoa(form.startHour),
+		strconv.Itoa(form.startMinute),
+	)
+	fmt.Fprintf(textView, "    ~     \n")
+	fmt.Fprintf(textView, "%s/%s/%s %s:%s\n",
+		strconv.Itoa(form.endYear),
+		strconv.Itoa(int(form.endMonth)),
+		strconv.Itoa(form.endDay),
+		strconv.Itoa(form.endHour),
+		strconv.Itoa(form.endMinute),
+	)
 }

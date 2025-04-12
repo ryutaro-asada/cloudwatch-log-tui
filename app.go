@@ -28,9 +28,6 @@ func NewApp() *App {
 			widgets: make(map[Widget]tview.Primitive),
 			layouts: make(map[Layout]tview.Primitive),
 			lEForm: &logEventForm{
-				startTimeSelected:  false,
-				endTimeSelected:    false,
-				enableFilterPatern: false,
 				enableOutputFile:   false,
 			},
 			logGroup: logGroup{

@@ -5,7 +5,7 @@ import (
 	"context"
 	"log"
 	// "os"
-	"time"
+	// "time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -171,25 +171,4 @@ func (a *awsResource) getLogStreams(ls logStream) {
 	} else {
 		a.hasPrevLogStream = false
 	}
-}
-
-func startTime(lef *logEventForm) *int64 {
-	if lef.startTimeSelected {
-		return aws.Int64(time.Date(lef.startYear, lef.startMonth, lef.startDay, lef.startHour, lef.startMinute, 0, 0, time.Local).UnixMilli())
-	}
-	return nil
-}
-
-func endTime(lef *logEventForm) *int64 {
-	if lef.endTimeSelected {
-		return aws.Int64(time.Date(lef.endYear, lef.endMonth, lef.endDay, lef.endHour, lef.endMinute, 0, 0, time.Local).UnixMilli())
-	}
-	return nil
-}
-
-func filterPattern(lef *logEventForm) *string {
-	if lef.enableFilterPatern {
-		return aws.String(lef.filterPatern)
-	}
-	return nil
 }
