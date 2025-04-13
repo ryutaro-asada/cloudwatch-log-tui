@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"slices"
 	"time"
 
@@ -46,19 +47,27 @@ type gui struct {
 	layouts   map[Layout]tview.Primitive
 	widgets   map[Widget]tview.Primitive
 	lEForm    *logEventForm
-	logGroup  logGroup
-	logStream logStream
+	logGroup  *logGroup
+	logStream *logStream
 }
 
 type logGroup struct {
 	filterPatern string
 	direction    Direction
+	currentPage  int
+	hasNext      bool
+	hasPrev      bool
+	pageTokens   map[int]*string
 }
 
 type logStream struct {
 	prefixPatern string
 	direction    Direction
 	logGroupName string
+	currentPage  int
+	hasNext      bool
+	hasPrev      bool
+	pageTokens   map[int]*string
 }
 
 type logEventForm struct {
@@ -88,13 +97,9 @@ type logEventInput struct {
 func (g *gui) setGui(aw *awsResource) {
 	g.setLogGroupLayout()
 	g.setLogEventLayout()
-	// g.widgets[Modal] = tview.NewModal().
-	// 	SetText("Do you want to quit the application?").
-	// 	AddButtons([]string{"Quit", "Cancel"})
 	g.pages = tview.NewPages().
 		AddPage(pageNames[LogGroupPage], g.layouts[LogGroupLayout], true, true).
 		AddPage(pageNames[LogEventPage], g.layouts[LogEventLayout], true, false)
-		// AddPage(pageNames[ModalPage], g.widgets[Modal], false, false)
 
 	g.setKeybinding(aw)
 }
@@ -121,7 +126,7 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 	}
 	row++
 
-	if aw.hasPrevLogGroup {
+	if g.logGroup.hasPrev {
 		lgTable.SetCell(row, 0, tview.NewTableCell(PrevPage).
 			SetTextColor(tcell.ColorLightSalmon).
 			SetMaxWidth(1).
@@ -153,7 +158,8 @@ func (g *gui) setLogGroupToGui(aw *awsResource) {
 		row++
 	}
 
-	if aw.hasNextLogGroup {
+	if g.logGroup.hasNext {
+		log.Printf("hasNext: %v", g.logGroup.hasNext)
 		lgTable.SetCell(row, 0, tview.NewTableCell(NextPage).
 			SetTextColor(tcell.ColorLightSteelBlue).
 			SetMaxWidth(1).
@@ -184,7 +190,7 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 	}
 	row++
 
-	if aw.hasPrevLogStream {
+	if g.logStream.hasPrev {
 		lsTable.SetCell(row, 0, tview.NewTableCell("").
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).
@@ -261,7 +267,7 @@ func (g *gui) setLogStreamToGui(aw *awsResource) {
 
 	}
 
-	if aw.hasNextLogStream {
+	if g.logStream.hasNext {
 		lsTable.SetCell(row, 0, tview.NewTableCell("").
 			SetTextColor(tcell.ColorLightGreen).
 			SetMaxWidth(1).

@@ -28,19 +28,19 @@ func NewApp() *App {
 			widgets: make(map[Widget]tview.Primitive),
 			layouts: make(map[Layout]tview.Primitive),
 			lEForm: &logEventForm{
-				enableOutputFile:   false,
+				enableOutputFile: false,
 			},
-			logGroup: logGroup{
-				direction: Home,
+			logGroup: &logGroup{
+				direction:  Home,
+				pageTokens: make(map[int]*string),
 			},
-			logStream: logStream{
-				direction: Home,
+			logStream: &logStream{
+				direction:  Home,
+				pageTokens: make(map[int]*string),
 			},
 		},
 		awsr: &awsResource{
-			client:              cwl.NewFromConfig(cfg),
-			pageTokensLogGroup:  make(map[int]*string),
-			pageTokensLogStream: make(map[int]*string),
+			client: cwl.NewFromConfig(cfg),
 		},
 	}
 }

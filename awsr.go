@@ -1,11 +1,8 @@
 package main
 
 import (
-	// "bufio"
 	"context"
 	"log"
-	// "os"
-	// "time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -15,20 +12,10 @@ import (
 const maxItemsInPage int32 = 50
 
 type awsResource struct {
-	logGroups           []cwlTypes.LogGroup
-	currentPageLogGroup int
-	pageTokensLogGroup  map[int]*string
-	hasNextLogGroup     bool
-	hasPrevLogGroup     bool
+	logGroups []cwlTypes.LogGroup
 
-	// pagesLogGroup  *cwl.DescribeLogGroupsPaginator
-	logStreams           []cwlTypes.LogStream
-	currentPageLogStream int
-	pageTokensLogStream  map[int]*string
-	hasNextLogStream     bool
-	hasPrevLogStream     bool
+	logStreams []cwlTypes.LogStream
 
-	// pagesLogStream *cwl.DescribeLogStreamsPaginator
 	client *cwl.Client
 }
 
@@ -40,15 +27,7 @@ func (a *awsResource) getLogEvents(input logEventInput) (*cwl.FilterLogEventsOut
 	return res, nil
 }
 
-func (a *awsResource) getLogGroups(lg logGroup) {
-	// if direction is next,
-	// - increment currentPageLogGroup after successful call
-	// - set hasNextLogGroup to true if NextToken of responce is not nil
-	// - set hasPrevLogGroup to true if currentPageLogGroup > 1
-	// - set NextToken of currentPageLogGroup+1
-
-	// if direction is prev, decrement currentPageLogGroup
-
+func (a *awsResource) getLogGroups(lg *logGroup) {
 	filterPatern := lg.filterPatern
 	direct := lg.direction
 
@@ -64,16 +43,15 @@ func (a *awsResource) getLogGroups(lg logGroup) {
 	// TODO: add test
 	switch direct {
 	case Next:
-		params.NextToken = a.pageTokensLogGroup[a.currentPageLogGroup+1]
+		params.NextToken = lg.pageTokens[lg.currentPage+1]
 
 	case Prev:
 		// if currentPageLogGroup == 1, a.pageTokenLogGroup will return nil and params.NextToken will be nil
 		// so, first page will be fetched
-		params.NextToken = a.pageTokensLogGroup[a.currentPageLogGroup-1]
+		params.NextToken = lg.pageTokens[lg.currentPage-1]
 
 	case Home:
-		a.currentPageLogGroup = 1
-		a.pageTokensLogGroup = make(map[int]*string)
+		lg.pageTokens = make(map[int]*string)
 
 	}
 
@@ -83,39 +61,31 @@ func (a *awsResource) getLogGroups(lg logGroup) {
 	}
 	a.logGroups = res.LogGroups
 
-	// TODO: add test
 	switch direct {
 	case Next:
-		a.currentPageLogGroup++
+		lg.currentPage++
 	case Prev:
-		a.currentPageLogGroup--
+		lg.currentPage--
+	case Home:
+		lg.currentPage = 1
 	}
 
-	// TODO: add test
 	if res.NextToken != nil && len(res.LogGroups) == int(maxItemsInPage) {
-		a.pageTokensLogGroup[a.currentPageLogGroup+1] = res.NextToken
-		a.hasNextLogGroup = true
+		log.Printf("next token: %s", *res.NextToken)
+		lg.pageTokens[lg.currentPage+1] = res.NextToken
+		lg.hasNext = true
 	} else {
-		a.hasNextLogGroup = false
+		lg.hasNext = false
 	}
 
-	// TODO: add test
-	if a.currentPageLogGroup > 1 {
-		a.hasPrevLogGroup = true
+	if lg.currentPage > 1 {
+		lg.hasPrev = true
 	} else {
-		a.hasPrevLogGroup = false
+		lg.hasPrev = false
 	}
 }
 
-func (a *awsResource) getLogStreams(ls logStream) {
-	// if direction is next,
-	// - increment currentPageLogGroup after successful call
-	// - set hasNextLogGroup to true if NextToken of responce is not nil
-	// - set hasPrevLogGroup to true if currentPageLogGroup > 1
-	// - set NextToken of currentPageLogGroup+1
-
-	// if direction is prev, decrement currentPageLogGroup
-
+func (a *awsResource) getLogStreams(ls *logStream) {
 	prefixPatern := ls.prefixPatern
 	direct := ls.direction
 	logGroupName := ls.logGroupName
@@ -125,22 +95,19 @@ func (a *awsResource) getLogStreams(ls logStream) {
 		Limit:        aws.Int32(maxItemsInPage),
 	}
 
-	// TODO: add test
 	if prefixPatern != "" {
 		params.LogStreamNamePrefix = aws.String(prefixPatern)
 	}
 
-	// TODO: add test
 	switch direct {
 	case Next:
-		params.NextToken = a.pageTokensLogStream[a.currentPageLogStream+1]
+		params.NextToken = ls.pageTokens[ls.currentPage+1]
 	case Prev:
 		// if currentPageLogGroup == 1, a.pageTokenLogGroup will return nil and params.NextToken will be nil
 		// so, first page will be fetched
-		params.NextToken = a.pageTokensLogStream[a.currentPageLogStream-1]
+		params.NextToken = ls.pageTokens[ls.currentPage-1]
 	case Home:
-		a.currentPageLogStream = 1
-		a.pageTokensLogStream = make(map[int]*string)
+		ls.pageTokens = make(map[int]*string)
 	}
 
 	res, err := a.client.DescribeLogStreams(context.TODO(), params)
@@ -149,26 +116,27 @@ func (a *awsResource) getLogStreams(ls logStream) {
 	}
 	a.logStreams = res.LogStreams
 
-	// TODO: add test
 	switch direct {
 	case Next:
-		a.currentPageLogStream++
+		ls.currentPage++
 	case Prev:
-		a.currentPageLogStream--
+		ls.currentPage--
+	case Home:
+		ls.currentPage = 1
 	}
 
 	// TODO: add test
 	if res.NextToken != nil && len(res.LogStreams) == int(maxItemsInPage) {
-		a.pageTokensLogStream[a.currentPageLogStream+1] = res.NextToken
-		a.hasNextLogStream = true
+		ls.pageTokens[ls.currentPage+1] = res.NextToken
+		ls.hasNext = true
 	} else {
-		a.hasNextLogStream = false
+		ls.hasNext = false
 	}
 
 	// TODO: add test
-	if a.currentPageLogStream > 1 {
-		a.hasPrevLogStream = true
+	if ls.currentPage > 1 {
+		ls.hasPrev = true
 	} else {
-		a.hasPrevLogStream = false
+		ls.hasPrev = false
 	}
 }

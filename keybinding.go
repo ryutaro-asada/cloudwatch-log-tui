@@ -26,16 +26,12 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
 
 	lgTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		max := lgTable.GetRowCount()
 		row, _ := lgTable.GetSelection()
-		switch event.Rune() {
-		case 'k':
-			// up
-			lgTable.Select((row)%max, 0)
-		case 'j':
-			// down
-			lgTable.Select((row)%max, 0)
+		max := lgTable.GetRowCount()
 
+		switch event.Rune() {
+		case 'k', 'j':
+			lgTable.Select(row%max, 0)
 		case '/':
 			g.tvApp.SetFocus(lgSearch)
 		}
@@ -43,14 +39,18 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		if event.Key() == tcell.KeyTab {
 			g.tvApp.SetFocus(lsTable)
 		}
+
 		return event
 	})
 
-	lgTable.SetSelectedFunc(func(row, column int) {
+	lgTable.SetSelectedFunc(func(row, _ int) {
 		cell := lgTable.GetCell(row, 0)
-		g.lEForm.logGroupName = cell.Text
-		g.logStream.logGroupName = cell.Text
+		groupName := cell.Text
+
+		g.lEForm.logGroupName = groupName
+		g.logStream.logGroupName = groupName
 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
+
 		go func() {
 			aw.getLogStreams(g.logStream)
 			g.tvApp.QueueUpdateDraw(func() {
@@ -59,39 +59,35 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		}()
 	})
 
-	lgTable.SetSelectionChangedFunc(func(row, column int) {
+	lgTable.SetSelectionChangedFunc(func(row, _ int) {
 		cell := lgTable.GetCell(row, 0)
 		switch cell.Text {
 		case PrevPage:
-			lgTable.Clear()
 			g.logGroup.direction = Prev
-			aw.getLogGroups(g.logGroup)
-			g.setLogGroupToGui(aw)
-			lgTable.Select(lgTable.GetRowCount()-2, 0)
-
+			refreshLogGroups(g, aw, lgTable, lgTable.GetRowCount()-2)
 		case NextPage:
-			lgTable.Clear()
 			g.logGroup.direction = Next
-			aw.getLogGroups(g.logGroup)
-			g.setLogGroupToGui(aw)
-			lgTable.Select(2, 0)
+			refreshLogGroups(g, aw, lgTable, 2)
 		}
 	})
 
 	lgSearch.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
-			g.tvApp.SetFocus(g.widgets[LogGroupTable])
+			g.tvApp.SetFocus(lgTable)
 		}
 	})
+
 	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
 			g.tvApp.SetFocus(lgTable)
 		}
 		return event
 	})
-	lgSearch.SetChangedFunc(func(filterPatern string) {
-		g.logGroup.filterPatern = filterPatern
+
+	lgSearch.SetChangedFunc(func(pattern string) {
+		g.logGroup.filterPatern = pattern
 		g.logGroup.direction = Home
+
 		go func() {
 			aw.getLogGroups(g.logGroup)
 			g.tvApp.QueueUpdateDraw(func() {
@@ -101,6 +97,95 @@ func (g *gui) setLogGroupKeybinding(aw *awsResource) {
 		}()
 	})
 }
+
+func refreshLogGroups(g *gui, aw *awsResource, table *tview.Table, selectRow int) {
+	table.Clear()
+	aw.getLogGroups(g.logGroup)
+	g.setLogGroupToGui(aw)
+	table.Select(selectRow, 0)
+}
+
+// func (g *gui) setLogGroupKeybinding(aw *awsResource) {
+// 	lgTable := g.widgets[LogGroupTable].(*tview.Table)
+// 	lgSearch := g.widgets[LogGroupSearch].(*tview.InputField)
+// 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
+//
+// 	lgTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+// 		max := lgTable.GetRowCount()
+// 		row, _ := lgTable.GetSelection()
+// 		switch event.Rune() {
+// 		case 'k':
+// 			// up
+// 			lgTable.Select((row)%max, 0)
+// 		case 'j':
+// 			// down
+// 			lgTable.Select((row)%max, 0)
+//
+// 		case '/':
+// 			g.tvApp.SetFocus(lgSearch)
+// 		}
+//
+// 		if event.Key() == tcell.KeyTab {
+// 			g.tvApp.SetFocus(lsTable)
+// 		}
+// 		return event
+// 	})
+//
+// 	lgTable.SetSelectedFunc(func(row, column int) {
+// 		cell := lgTable.GetCell(row, 0)
+// 		g.lEForm.logGroupName = cell.Text
+// 		g.logStream.logGroupName = cell.Text
+// 		g.tvApp.SetFocus(g.widgets[LogStreamTable])
+// 		go func() {
+// 			aw.getLogStreams(g.logStream)
+// 			g.tvApp.QueueUpdateDraw(func() {
+// 				g.setLogStreamToGui(aw)
+// 			})
+// 		}()
+// 	})
+//
+// 	lgTable.SetSelectionChangedFunc(func(row, column int) {
+// 		cell := lgTable.GetCell(row, 0)
+// 		switch cell.Text {
+// 		case PrevPage:
+// 			lgTable.Clear()
+// 			g.logGroup.direction = Prev
+// 			aw.getLogGroups(g.logGroup)
+// 			g.setLogGroupToGui(aw)
+// 			lgTable.Select(lgTable.GetRowCount()-2, 0)
+//
+// 		case NextPage:
+// 			lgTable.Clear()
+// 			g.logGroup.direction = Next
+// 			aw.getLogGroups(g.logGroup)
+// 			g.setLogGroupToGui(aw)
+// 			lgTable.Select(2, 0)
+// 		}
+// 	})
+//
+// 	lgSearch.SetDoneFunc(func(key tcell.Key) {
+// 		if key == tcell.KeyEnter {
+// 			g.tvApp.SetFocus(g.widgets[LogGroupTable])
+// 		}
+// 	})
+// 	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+// 		if event.Key() == tcell.KeyEsc {
+// 			g.tvApp.SetFocus(lgTable)
+// 		}
+// 		return event
+// 	})
+// 	lgSearch.SetChangedFunc(func(filterPatern string) {
+// 		g.logGroup.filterPatern = filterPatern
+// 		g.logGroup.direction = Home
+// 		go func() {
+// 			aw.getLogGroups(g.logGroup)
+// 			g.tvApp.QueueUpdateDraw(func() {
+// 				lgTable.Clear()
+// 				g.setLogGroupToGui(aw)
+// 			})
+// 		}()
+// 	})
+// }
 
 func (g *gui) setLogStreamKeybinding(aw *awsResource) {
 	lsTable := g.widgets[LogStreamTable].(*tview.Table)
