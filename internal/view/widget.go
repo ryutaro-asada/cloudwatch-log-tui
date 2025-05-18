@@ -54,7 +54,7 @@ var (
 		EndDayDropDown:      "EndDay",
 		EndHourDropDown:     "EndHour",
 		EndMinuteDropDown:   "EndMinute",
-		FilterPaternInput:   "FilterPatern",
+		FilterPatternInput:  "FilterPattern",
 		OutputFileInput:     "OutputFile",
 		SaveEventLogButton:  "SaveEventLog",
 		BackButton:          "Back",
