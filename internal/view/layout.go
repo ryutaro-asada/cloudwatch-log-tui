@@ -1,4 +1,4 @@
-package main
+package view
 
 import (
 	"github.com/rivo/tview"
@@ -13,27 +13,34 @@ const (
 	LogEventLayout
 )
 
-var layoutNames = map[Layout]string{
+var LayoutNames = map[Layout]string{
 	LogGroupLayout:  "LogGroup",
 	LogStreamLayout: "LogStream",
 	LogEventLayout:  "LogEvent",
 }
 
-func (g *gui) setLogGroupLayout() {
-	g.setLogGroupWidget()
-	g.setLogStreamWidget()
-	g.layouts[LogGroupLayout] = tview.NewFlex().
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[LogGroupTable], 0, 30, false).
-			AddItem(g.widgets[LogGroupSearch], 0, 1, false), 0, 10, true).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(g.widgets[LogStreamTable], 0, 30, true).
-			AddItem(g.widgets[LogStreamSearch], 0, 1, false), 0, 10, false)
+type Layouts struct {
+	LogGroupAndStream *tview.Flex
+	LogEvent          *tview.Grid
 }
 
-func (g *gui) setLogEventLayout() {
-	g.setLogEventWidget()
-	g.layouts[LogEventLayout] = tview.NewGrid().
+func (l *Layouts) setUp(w *Widgets) {
+	l.setUpLayoutLogGroupAndStream(w)
+	l.setUpLayoutLogEvent(w)
+}
+
+func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
+	l.LogGroupAndStream = tview.NewFlex().
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(w.LogGroup.Table, 0, 30, false).
+			AddItem(w.LogGroup.Search, 0, 1, false), 0, 10, true).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(w.LogStream.Table, 0, 30, true).
+			AddItem(w.LogStream.Search, 0, 1, false), 0, 10, false)
+}
+
+func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
+	l.LogEvent = tview.NewGrid().
 		SetRows(
 			// drop down options
 			1, 1, 1,
@@ -42,80 +49,80 @@ func (g *gui) setLogEventLayout() {
 		SetColumns(0, 0, 0, 0, 0).
 		SetBorders(true).
 		// start date
-		AddItem(g.widgets[StartYearDropDown],
+		AddItem(w.LogEvent.StartYear,
 			0, 0, // row, column position
 			1, 1, // rowSpan, columnSpan
 			0, 100, // minHeight, minWidth
 			false). // focusable
-		AddItem(g.widgets[StartMonthDropDown],
+		AddItem(w.LogEvent.StartMonth,
 			0, 1,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[StartDayDropDown],
+		AddItem(w.LogEvent.StartDay,
 			0, 2,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[StartHourDropDown],
+		AddItem(w.LogEvent.StartHour,
 			0, 3,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[StartMinuteDropDown],
+		AddItem(w.LogEvent.StartMinute,
 			0, 4,
 			1, 1,
 			0, 100,
 			false).
 		// end date
-		AddItem(g.widgets[EndYearDropDown],
+		AddItem(w.LogEvent.EndYear,
 			1, 0,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[EndMonthDropDown],
+		AddItem(w.LogEvent.EndMonth,
 			1, 1,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[EndDayDropDown],
+		AddItem(w.LogEvent.EndDay,
 			1, 2,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[EndHourDropDown],
+		AddItem(w.LogEvent.EndHour,
 			1, 3,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[EndMinuteDropDown],
+		AddItem(w.LogEvent.EndMinute,
 			1, 4,
 			1, 1,
 			0, 100,
 			false).
 		// aditional input
-		AddItem(g.widgets[FilterPaternInput],
+		AddItem(w.LogEvent.FilterPatern,
 			2, 0,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[OutputFileInput],
+		AddItem(w.LogEvent.OutputFile,
 			2, 1,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[SaveEventLogButton],
+		AddItem(w.LogEvent.SaveEventLog,
 			2, 2,
 			1, 1,
 			0, 100,
 			false).
-		AddItem(g.widgets[BackButton],
+		AddItem(w.LogEvent.Back,
 			2, 3,
 			1, 1,
 			0, 100,
 			false).
 		// Log View
-		AddItem(g.widgets[ViewLog],
+		AddItem(w.LogEvent.ViewLog,
 			3, 0,
 			1, 5,
 			0, 100,
