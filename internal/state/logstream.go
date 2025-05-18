@@ -83,8 +83,8 @@ func (l *LogStream) SetLogGroupSelected(logGroupName string) {
 }
 
 func (l *LogStream) SetPrefixPattern(prefixPatern string) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	l.prefixPatern = prefixPatern
 }
