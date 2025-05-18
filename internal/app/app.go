@@ -360,7 +360,7 @@ func (a *App) setLogEventToGui(output *awsr.LogEventOutput) {
 	}
 
 	for _, event := range output.LogEvents {
-		fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+		fmt.Fprintf(textView, "%s", aws.ToString(event.Message))
 	}
 }
 
@@ -378,15 +378,22 @@ func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 	table.Select(selectRow, 0)
 }
 
-// func (a *App) SaveLogEvent() {
-// 	go func() {
-// 		input := &awsr.LogEventInput{
-// 			Ctx: a.ctx,
-// 		}
-// 		a.state.LogEvent.BeforeGet(input)
-// 		output, err := a.awsClient.WrireLogEvents(input)
-// 		if err != nil {
-// 			log.Fatalf("unnable to write logs, %v", err)
-// 		}
-// 	}()
-// }
+func (a *App) SaveLogEvents() {
+	textView := a.view.Widgets.LogEvent.ViewLog
+	textView.Clear()
+	fmt.Fprintln(textView, "Now Loading... ")
+	go func() {
+		input := &awsr.LogEventInput{
+			Ctx: a.ctx,
+		}
+		a.state.LogEvent.BeforeGet(input)
+		err := a.awsClient.WrireLogEvents(input)
+		if err != nil {
+			log.Fatalf("unnable to write logs, %v", err)
+		}
+		a.tvApp.QueueUpdateDraw(func() {
+			textView.Clear()
+			fmt.Fprintln(textView, "Finished writing log events.")
+		})
+	}()
+}

@@ -146,9 +146,6 @@ func (l *LogEvent) isInValid() bool {
 	if l.logGroupName == "" {
 		return true
 	}
-	if len(l.logStreamNames) == 0 {
-		return true
-	}
 	return l.startYear == 0 ||
 		l.startMonth == 0 ||
 		l.startDay == 0 ||
@@ -198,10 +195,11 @@ func string2int(s string) int {
 }
 
 func (l *LogEvent) Print(textView *tview.TextView) {
-	fmt.Fprintf(textView, "Your setting is\n")
-	fmt.Fprintf(textView, "%s\n", l.logGroupName)
-	fmt.Fprintf(textView, "%s\n", l.logStreamNames)
-	fmt.Fprintf(textView, "%s\n", l.filterPatern)
+	fmt.Fprintf(textView, "------------------------------------- \n")
+	fmt.Fprintf(textView, "[YOUR SETTING]\n")
+	fmt.Fprintf(textView, "LogGroup: %s\n", l.logGroupName)
+	fmt.Fprintf(textView, "LogStreams: %s\n", l.logStreamNames)
+	fmt.Fprintf(textView, "FilterPaterm: %s\n", l.filterPatern)
 
 	fmt.Fprintf(textView, "%s/%s/%s %s:%s\n",
 		strconv.Itoa(l.startYear),
@@ -218,5 +216,5 @@ func (l *LogEvent) Print(textView *tview.TextView) {
 		strconv.Itoa(l.endHour),
 		strconv.Itoa(l.endMinute),
 	)
-	fmt.Fprintf(textView, " \n")
+	fmt.Fprintf(textView, "------------------------------------- \n")
 }

@@ -97,30 +97,32 @@ func (a *App) setUpKeybindingLogStream() {
 
 		case '/':
 			a.tvApp.SetFocus(lsSearch)
-		// Space key
-		case ' ':
 
-			ls := lsTable.GetCell(row, 1).Text
-			if ls == "All Log Streams" {
-				return nil
-			}
-			lsTable.Clear()
-
-			lsSelected := a.state.LogEvent.GetLogStreamsSelected()
-			// check if log stream is selected
-			switch slices.Contains(lsSelected, ls) {
-			case true:
-				// set log stream as unselected
-				i := slices.Index(lsSelected, ls)
-				a.state.LogEvent.SetLogStreamsSelected(slices.Delete(lsSelected, i, i+1))
-			case false:
-				// set log stream as selected
-				a.state.LogEvent.SetLogStreamsSelected(append(lsSelected, ls))
-			}
-
-			a.refreshLogStreamTable()
-
-			return nil
+			// TODO: fix bug
+			// Space key
+			// case ' ':
+			//
+			// 	ls := lsTable.GetCell(row, 1).Text
+			// 	if ls == "All Log Streams" {
+			// 		return nil
+			// 	}
+			// 	lsTable.Clear()
+			//
+			// 	lsSelected := a.state.LogEvent.GetLogStreamsSelected()
+			// 	// check if log stream is selected
+			// 	switch slices.Contains(lsSelected, ls) {
+			// 	case true:
+			// 		// set log stream as unselected
+			// 		i := slices.Index(lsSelected, ls)
+			// 		a.state.LogEvent.SetLogStreamsSelected(slices.Delete(lsSelected, i, i+1))
+			// 	case false:
+			// 		// set log stream as selected
+			// 		a.state.LogEvent.SetLogStreamsSelected(append(lsSelected, ls))
+			// 	}
+			//
+			// 	a.refreshLogStreamTable()
+			//
+			// 	return nil
 		}
 
 		if event.Key() == tcell.KeyTab {
@@ -294,7 +296,7 @@ func (a *App) setUpKeybindingLogEvent() {
 		return event
 	})
 	saveButton.SetSelectedFunc(func() {
-		// a.SaveLogEvents()
+		a.SaveLogEvents()
 	})
 
 	backButton := a.view.Widgets.LogEvent.Back

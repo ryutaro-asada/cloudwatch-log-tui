@@ -19,6 +19,7 @@ func New() *UIState {
 	return &UIState{
 		LogEvent: &LogEvent{
 			enableOutputFile: false,
+			logStreamNames:   make([]string, 0),
 		},
 		LogGroup: &LogGroup{
 			pageTokens: make(map[int]*string),
