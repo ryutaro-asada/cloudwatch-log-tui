@@ -30,7 +30,7 @@ const (
 	EndDayDropDown
 	EndHourDropDown
 	EndMinuteDropDown
-	FilterPaternInput
+	FilterPatternInput
 	OutputFileInput
 	SaveEventLogButton
 	BackButton
