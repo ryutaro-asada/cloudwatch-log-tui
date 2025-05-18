@@ -2,7 +2,7 @@ package config
 
 import (
 	"os"
-	"path/filepath"
+	// "path/filepath"
 )
 
 // Config holds the application configuration
@@ -12,13 +12,13 @@ type Config struct {
 
 // New creates a new configuration with default values
 func New() *Config {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
-	}
+	// homeDir, err := os.UserHomeDir()
+	// if err != nil {
+	// 	homeDir = "."
+	// }
 
 	return &Config{
-		LogFile: filepath.Join(homeDir, ".cloudwatch-log-tui.log"),
+		LogFile: "cloudwatch-log-tui.log",
 	}
 }
 

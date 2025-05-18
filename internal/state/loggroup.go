@@ -2,6 +2,7 @@ package state
 
 import (
 	"sync"
+	// "log"
 
 	awsr "github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
 )
@@ -35,6 +36,12 @@ func (l *LogGroup) BeforeGet(input *awsr.LogGroupInput, direct Direction) {
 func (l *LogGroup) AfterGet(output *awsr.LogGroupOutput, direct Direction) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
+
+	// // ✅ nil チェックして初期化（必要に応じて）
+	// if l.pageTokens == nil {
+	// 	l.pageTokens = make(map[int]*string)
+	// 	log.Println("pageTokens is nil, initializing")
+	// }
 
 	switch direct {
 	case Next:
@@ -79,4 +86,3 @@ func (l *LogGroup) SetFilterPattern(filterPatern string) {
 
 	l.filterPatern = filterPatern
 }
-

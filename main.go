@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/app"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/config"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/state"
-	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/ui"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Create UI
-	app := ui.New(ctx, awsClient)
+	app := app.New(ctx, awsClient)
 
 	go app.LoadLogGroups(state.Home)
 

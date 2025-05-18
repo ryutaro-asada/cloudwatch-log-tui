@@ -15,7 +15,7 @@ type UIState struct {
 	LogEvent  *LogEvent
 }
 
-func NewUIState() *UIState {
+func New() *UIState {
 	return &UIState{
 		LogEvent: &LogEvent{
 			enableOutputFile: false,

@@ -1,4 +1,4 @@
-package ui
+package app
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/rivo/tview"
 	awsr "github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/state"
+	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
 )
 
 // Constants and enum types
@@ -24,18 +25,16 @@ const (
 // App represents the main UI application
 type App struct {
 	tvApp     *tview.Application
-	pages     *tview.Pages
-	layouts   map[Layout]tview.Primitive
-	widgets   map[Widget]tview.Primitive
+	view      *view.View
 	state     *state.UIState
 	awsClient *awsr.Client
 	ctx       context.Context
 }
 
 func (a *App) Run() error {
-	return a.tvApp.SetRoot(a.pages, true).
+	return a.tvApp.SetRoot(a.view.Pages, true).
 		EnableMouse(true).
-		SetFocus(a.widgets[LogGroupTable]).
+		SetFocus(a.view.Widgets.LogGroup.Table).
 		Run()
 }
 
@@ -43,23 +42,13 @@ func (a *App) Run() error {
 func New(ctx context.Context, awsClient *awsr.Client) *App {
 	app := &App{
 		tvApp:     tview.NewApplication(),
-		widgets:   make(map[Widget]tview.Primitive),
-		layouts:   make(map[Layout]tview.Primitive),
 		awsClient: awsClient,
 		ctx:       ctx,
 	}
-	app.state = state.NewUIState()
-
-	app.setupUI()
+	app.state = state.New()
+	app.view = view.New()
+	app.setUpKeyBindings()
 	return app
-}
-
-// setupUI initializes the UI layout
-func (a *App) setupUI() {
-	a.setUpWidgets()
-	a.setUpLayouts()
-	a.setUpPages()
-	a.setUpKeyBindings()
 }
 
 // LoadLogGroups loads and displays the log groups
@@ -77,7 +66,7 @@ func (a *App) LoadLogGroups(direct state.Direction) {
 
 		a.tvApp.QueueUpdateDraw(func() {
 			a.setLogGroupToGui(output)
-			table := a.widgets[LogGroupTable].(*tview.Table)
+			table := a.view.Widgets.LogGroup.Table
 			a.initTableRowPosition(table, direct)
 		})
 	}()
@@ -87,7 +76,7 @@ func (a *App) LoadLogGroups(direct state.Direction) {
 func (a *App) LoadLogStreams(direct state.Direction) {
 	go func() {
 		input := &awsr.LogStreamInput{
-			Ctx:          a.ctx,
+			Ctx: a.ctx,
 		}
 		a.state.LogStream.BeforeGet(input, direct)
 		output, err := a.awsClient.GetLogStreams(input)
@@ -98,29 +87,61 @@ func (a *App) LoadLogStreams(direct state.Direction) {
 
 		a.tvApp.QueueUpdateDraw(func() {
 			a.setLogStreamToGui(output)
-			table := a.widgets[LogStreamTable].(*tview.Table)
+			table := a.view.Widgets.LogStream.Table
 			a.initTableRowPosition(table, direct)
 		})
 	}()
 }
 
 // loadLogEvents loads and displays the log events
-func (a *App) LoadLogEvents(groupName, streamName string) {
-	a.logEvents.Clear()
+func (a *App) LoadLogEvents() {
+	textView := a.view.Widgets.LogEvent.ViewLog
+	textView.Clear()
+	fmt.Fprintln(textView, "Now Loading... ")
+	go func() {
+		input := &awsr.LogEventInput{
+			Ctx: a.ctx,
+		}
+		a.state.LogEvent.BeforeGet(input)
+		output, err := a.awsClient.GetLogEvents(input)
+		if err != nil {
+			log.Fatalf("unnable to write logs, %v", err)
+		}
 
-	events, err := a.awsClient.GetLogEvents(a.ctx, groupName, streamName, nil, nil)
-	if err != nil {
-		log.Printf("Error loading log events: %v", err)
-		return
-	}
+		a.tvApp.QueueUpdateDraw(func() {
+			a.setLogEventToGui(output)
+		})
+	}()
+}
 
-	for _, event := range events {
-		a.logEvents.Write([]byte(*event.Message + "\n"))
-	}
+func (a *App) setDefaultDropDownLogEvents() {
+	_, startMonth, startDay, startHour, startMinute := a.state.LogEvent.GetStartTime()
+	a.view.Widgets.LogEvent.StartYear.
+		SetCurrentOption(1)
+	a.view.Widgets.LogEvent.StartMonth.
+		SetCurrentOption(startMonth - 1)
+	a.view.Widgets.LogEvent.StartDay.
+		SetCurrentOption(startDay - 1)
+	a.view.Widgets.LogEvent.StartHour.
+		SetCurrentOption(startHour)
+	a.view.Widgets.LogEvent.StartMinute.
+		SetCurrentOption(startMinute)
+
+	_, endMonth, endDay, endHour, endMinute := a.state.LogEvent.GetEndTime()
+	a.view.Widgets.LogEvent.EndYear.
+		SetCurrentOption(1)
+	a.view.Widgets.LogEvent.EndMonth.
+		SetCurrentOption(endMonth - 1)
+	a.view.Widgets.LogEvent.EndDay.
+		SetCurrentOption(endDay - 1)
+	a.view.Widgets.LogEvent.EndHour.
+		SetCurrentOption(endHour)
+	a.view.Widgets.LogEvent.EndMinute.
+		SetCurrentOption(endMinute)
 }
 
 func (a *App) refreshLogStreamTable() {
-	lsTable := a.widgets[LogStreamTable].(*tview.Table)
+	lsTable := a.view.Widgets.LogStream.Table
 	lsNames := make([]string, 0)
 	lsLastEvents := make([]string, 0)
 	lsFirstEvents := make([]string, 0)
@@ -142,7 +163,7 @@ func (a *App) refreshLogStreamTable() {
 
 // setLogGroupToGui sets the log group data to the GUI
 func (a *App) setLogGroupToGui(aw *awsr.LogGroupOutput) {
-	lgTable := a.widgets[LogGroupTable].(*tview.Table)
+	lgTable := a.view.Widgets.LogGroup.Table
 	lgTable.Clear()
 
 	headers := []string{
@@ -205,7 +226,7 @@ func (a *App) setLogGroupToGui(aw *awsr.LogGroupOutput) {
 }
 
 func (a *App) setLogStreamToGui(aw *awsr.LogStreamOutput) {
-	lsTable := a.widgets[LogStreamTable].(*tview.Table)
+	lsTable := a.view.Widgets.LogStream.Table
 	lsTable.Clear()
 
 	headers := []string{
@@ -328,6 +349,21 @@ func (a *App) setLogStreamToGui(aw *awsr.LogStreamOutput) {
 	}
 }
 
+func (a *App) setLogEventToGui(output *awsr.LogEventOutput) {
+	textView := a.view.Widgets.LogEvent.ViewLog
+	textView.Clear()
+	a.state.LogEvent.Print(textView)
+
+	if len(output.LogEvents) == 0 {
+		fmt.Fprintf(textView, "no events\n")
+		return
+	}
+
+	for _, event := range output.LogEvents {
+		fmt.Fprintf(textView, "%s\n", aws.ToString(event.Message))
+	}
+}
+
 func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 	var selectRow int
 	switch direct {
@@ -341,3 +377,16 @@ func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 
 	table.Select(selectRow, 0)
 }
+
+// func (a *App) SaveLogEvent() {
+// 	go func() {
+// 		input := &awsr.LogEventInput{
+// 			Ctx: a.ctx,
+// 		}
+// 		a.state.LogEvent.BeforeGet(input)
+// 		output, err := a.awsClient.WrireLogEvents(input)
+// 		if err != nil {
+// 			log.Fatalf("unnable to write logs, %v", err)
+// 		}
+// 	}()
+// }
