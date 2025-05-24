@@ -2,18 +2,16 @@
 
 A Command Line Interface (CLI) tool for viewing AWS CloudWatch Logs with a text-based user interface (TUI).
 
----
 
-## 🚀 Features
+### 🚀 Features
 
 - Browse and filter Log Groups
 - Browse and filter Log Streams within a selected Log Group
 - View log events interactively
 - Vim-like keybindings (`j` / `k`) for intuitive navigation
 
----
 
-## 🛠️ Installation
+### 🛠️ Installation
 
 To build the application:
 
@@ -21,29 +19,29 @@ To build the application:
 go build
 ```
 
-## ▶️ Usage
+### ▶️ Usage
 To run the application:
 
 ```bash
 ./cloudwatch-log-tui
 ```
-## ⌨️ Keybindings
+### ⌨️ Keybindings
 
-### Log Group Panel
+#### Log Group Panel
 | Action               | Key       |
 |----------------------|-----------|
 | Move Up/Down         | j / k     |
 | Select Log Group     | Enter     |
 | Filter Log Groups    | /         |
 
-### Log Stream Panel
+#### Log Stream Panel
 | Action               | Key       |
 |----------------------|-----------|
 | Move Up/Down         | j / k     |
 | Select Log Stream    | Enter     |
 | Filter Log Streams   | /         |
 
-### Log Event Panel
+#### Log Event Panel
 | Action                    | Key   |
 |---------------------------|--------|
 | Move to Next Widget       | Tab    |
@@ -51,10 +49,10 @@ To run the application:
 | Select Option in Dropdown | Enter  |
 | Press Button              | Enter  |
 
-## 📄 License
+### 📄 License
 
 MIT License
 
-## 🤝 Contributing
+### 🤝 Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
