@@ -198,6 +198,11 @@ func (l *LogEvent) Print(textView *tview.TextView) {
 	fmt.Fprintf(textView, "------------------------------------- \n")
 	fmt.Fprintf(textView, "[YOUR SETTING]\n")
 	fmt.Fprintf(textView, "LogGroup: %s\n", l.logGroupName)
+	if len(l.logStreamNames) == 0 {
+		fmt.Fprintf(textView, "LogStreams: %s\n", "ALL")
+	} else {
+		fmt.Fprintf(textView, "LogStreams: %s\n", l.logStreamNames)
+	}
 	fmt.Fprintf(textView, "LogStreams: %s\n", l.logStreamNames)
 	fmt.Fprintf(textView, "FilterPaterm: %s\n", l.filterPatern)
 
@@ -216,5 +221,8 @@ func (l *LogEvent) Print(textView *tview.TextView) {
 		strconv.Itoa(l.endHour),
 		strconv.Itoa(l.endMinute),
 	)
+
+	fmt.Fprintf(textView, "MaxEvent: %s\n", "1000")
+	fmt.Fprintf(textView, "You can get all log events by pressing 'Save Button'.\n")
 	fmt.Fprintf(textView, "------------------------------------- \n")
 }

@@ -137,6 +137,7 @@ func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
 		LogGroupName: aws.String(input.LogGroupName),
 		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
 		EndTime:      aws.Int64(input.EndTime.UnixMilli()),
+		Limit:        aws.Int32(1000),
 	}
 	if len(input.LogStreamNames) > 0 {
 		params.LogStreamNames = input.LogStreamNames
