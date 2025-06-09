@@ -13,17 +13,19 @@ A Command Line Interface (CLI) tool for viewing AWS CloudWatch Logs with a text-
 
 ### 🛠️ Installation
 
-To build the application:
 
 ```bash
-go build
+brew tap ryutaro-asada/cloudwatch-log-tui
+brew install cloudwatch-log-tui
 ```
+
+binary is available at [here](https://github.com/ryutaro-asada/cloudwatch-log-tui/releases)
 
 ### ▶️ Usage
 To run the application:
 
 ```bash
-./cloudwatch-log-tui
+cloudwatch-log-tui
 ```
 ### ⌨️ Keybindings
 
