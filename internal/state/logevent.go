@@ -135,8 +135,8 @@ func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) {
 	input.LogGroupName = l.logGroupName
 	input.LogStreamNames = l.logStreamNames
 	input.FilterPattern = l.filterPatern
-	input.StartTime = time.Date(l.startYear, time.Month(l.startMonth), l.startDay, l.startHour, l.startMinute, 0, 0, time.UTC)
-	input.EndTime = time.Date(l.endYear, time.Month(l.endMonth), l.endDay, l.endHour, l.endMinute, 0, 0, time.UTC)
+	input.StartTime = time.Date(l.startYear, time.Month(l.startMonth), l.startDay, l.startHour, l.startMinute, 0, 0, time.Local)
+	input.EndTime = time.Date(l.endYear, time.Month(l.endMonth), l.endDay, l.endHour, l.endMinute, 0, 0, time.Local)
 }
 
 func (l *LogEvent) isInValid() bool {
