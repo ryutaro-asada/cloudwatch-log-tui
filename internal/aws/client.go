@@ -157,7 +157,7 @@ func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
 	}, nil
 }
 
-func (c *Client) WrireLogEvents(input *LogEventInput) error {
+func (c *Client) WriteLogEvents(input *LogEventInput) error {
 	params := &cwl.FilterLogEventsInput{
 		LogGroupName: aws.String(input.LogGroupName),
 		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
@@ -195,7 +195,7 @@ func (c *Client) WrireLogEvents(input *LogEventInput) error {
 
 		for _, event := range res.Events {
 			message := aws.ToString(event.Message)
-			_, err := file.WriteString(message)
+			_, err := file.WriteString(message + "\n")
 			if err != nil {
 				return fmt.Errorf("failed to write log message: %v", err)
 			}
