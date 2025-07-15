@@ -387,7 +387,7 @@ func (a *App) SaveLogEvents() {
 			Ctx: a.ctx,
 		}
 		a.state.LogEvent.BeforeGet(input)
-		err := a.awsClient.WrireLogEvents(input)
+		err := a.awsClient.WriteLogEvents(input)
 		if err != nil {
 			log.Fatalf("unnable to write logs, %v", err)
 		}
