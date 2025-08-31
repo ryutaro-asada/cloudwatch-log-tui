@@ -294,8 +294,8 @@ func (a *App) setLogStreamToGui(aw *awsr.LogStreamOutput) {
 
 	for _, ls := range aw.LogStreams {
 		lsName := aws.ToString(ls.LogStreamName)
-		lastEventTime := time.Unix(aws.ToInt64(ls.LastEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
-		firstEventTime := time.Unix(aws.ToInt64(ls.FirstEventTimestamp), 0).Local().Format("2006-01-02 15:04:05")
+		lastEventTime := time.UnixMilli(aws.ToInt64(ls.LastEventTimestamp)).Local().Format("2006-01-02 15:04:05")
+		firstEventTime := time.UnixMilli(aws.ToInt64(ls.FirstEventTimestamp)).Local().Format("2006-01-02 15:04:05")
 		selectedMark := ""
 
 		if slices.Contains(a.state.LogEvent.GetLogStreamsSelected(), lsName) {
@@ -372,7 +372,7 @@ func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 	case state.Prev:
 		selectRow = table.GetRowCount() - 2
 	case state.Home:
-		selectRow = 2
+		selectRow = 1
 	}
 
 	table.Select(selectRow, 0)

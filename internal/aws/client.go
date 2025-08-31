@@ -27,7 +27,6 @@ type LogGroupInput struct {
 }
 type LogStreamInput struct {
 	LogGroupName  string
-	PrefixPattern string
 	NextToken     *string
 	Ctx           context.Context
 }
@@ -111,10 +110,8 @@ func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) 
 	params := &cwl.DescribeLogStreamsInput{
 		LogGroupName: aws.String(input.LogGroupName),
 		Limit:        aws.Int32(MaxItemsInLayout),
-	}
-
-	if input.PrefixPattern != "" {
-		params.LogStreamNamePrefix = &input.PrefixPattern
+		OrderBy:      cwlTypes.OrderByLastEventTime,
+		Descending:   aws.Bool(true),
 	}
 
 	if input.NextToken != nil {
@@ -188,7 +185,7 @@ func (c *Client) WriteLogEvents(input *LogEventInput) error {
 	})
 
 	for paginator.HasMorePages() {
-		res, err := paginator.NextPage(context.TODO())
+		res, err := paginator.NextPage(input.Ctx)
 		if err != nil {
 			return fmt.Errorf("unable to get log events: %v", err)
 		}

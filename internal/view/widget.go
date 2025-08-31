@@ -17,7 +17,6 @@ const (
 
 	// Log stream widgets
 	LogStreamTable
-	LogStreamSearch
 
 	// Log event form widgets
 	StartYearDropDown
@@ -43,7 +42,6 @@ var (
 		LogGroupTable:       "LogGroupTable",
 		LogGroupSearch:      "LogGroupSearch",
 		LogStreamTable:      "LogStreamTable",
-		LogStreamSearch:     "LogStreamSearch",
 		StartYearDropDown:   "StartYear",
 		StartMonthDropDown:  "StartMonth",
 		StartDayDropDown:    "StartDay",
@@ -74,7 +72,6 @@ type logGroupWidget struct {
 }
 type logStreamWidget struct {
 	Table  *tview.Table
-	Search *tview.InputField
 }
 type logEventWidget struct {
 	StartYear    *tview.DropDown
@@ -131,14 +128,6 @@ func (l *logStreamWidget) setUp() {
 	table.SetTitleAlign(tview.AlignLeft)
 	table.SetBorder(true)
 	l.Table = table
-
-	search := tview.NewInputField().SetLabel("Word")
-	search.SetLabelWidth(6)
-	search.SetTitle("Search for Log Streams")
-	search.SetTitleAlign(tview.AlignLeft)
-	search.SetBorder(true)
-	search.SetFieldBackgroundColor(tcell.ColorGray)
-	l.Search = search
 }
 
 func dropDownOptions() map[Widget][]string {
