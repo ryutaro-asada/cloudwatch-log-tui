@@ -21,7 +21,6 @@ func (l *LogStream) BeforeGet(input *awsr.LogStreamInput, direct Direction) {
 	defer l.mu.RUnlock()
 
 	input.LogGroupName = l.logGroupName
-	input.PrefixPattern = l.prefixPatern
 
 	switch direct {
 	case Next:
@@ -81,11 +80,3 @@ func (l *LogStream) SetLogGroupSelected(logGroupName string) {
 
 	l.logGroupName = logGroupName
 }
-
-func (l *LogStream) SetPrefixPattern(prefixPatern string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.prefixPatern = prefixPatern
-}
-

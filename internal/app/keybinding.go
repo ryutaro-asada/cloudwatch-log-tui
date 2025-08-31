@@ -34,7 +34,10 @@ func (a *App) setUpKeybindingLogGroup() {
 		switch event.Rune() {
 		case 'k', 'j':
 			// up/down
-			lgTable.Select(row%max, 0)
+			// wait for table to be updated
+                        if max > 0 {
+                            lgTable.Select(row%max, 0)
+                        }
 		case '/':
 			a.tvApp.SetFocus(lgSearch)
 		}
@@ -84,7 +87,6 @@ func (a *App) setUpKeybindingLogGroup() {
 
 func (a *App) setUpKeybindingLogStream() {
 	lsTable := a.view.Widgets.LogStream.Table
-	lsSearch := a.view.Widgets.LogStream.Search
 	lgTable := a.view.Widgets.LogGroup.Table
 
 	lsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -95,34 +97,6 @@ func (a *App) setUpKeybindingLogStream() {
 			// up/down
 			lsTable.Select(row%max, 0)
 
-		case '/':
-			a.tvApp.SetFocus(lsSearch)
-
-			// TODO: fix bug
-			// Space key
-			// case ' ':
-			//
-			// 	ls := lsTable.GetCell(row, 1).Text
-			// 	if ls == "All Log Streams" {
-			// 		return nil
-			// 	}
-			// 	lsTable.Clear()
-			//
-			// 	lsSelected := a.state.LogEvent.GetLogStreamsSelected()
-			// 	// check if log stream is selected
-			// 	switch slices.Contains(lsSelected, ls) {
-			// 	case true:
-			// 		// set log stream as unselected
-			// 		i := slices.Index(lsSelected, ls)
-			// 		a.state.LogEvent.SetLogStreamsSelected(slices.Delete(lsSelected, i, i+1))
-			// 	case false:
-			// 		// set log stream as selected
-			// 		a.state.LogEvent.SetLogStreamsSelected(append(lsSelected, ls))
-			// 	}
-			//
-			// 	a.refreshLogStreamTable()
-			//
-			// 	return nil
 		}
 
 		if event.Key() == tcell.KeyTab {
@@ -162,22 +136,6 @@ func (a *App) setUpKeybindingLogStream() {
 		}
 	})
 
-	// Search form
-	lsSearch.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			a.tvApp.SetFocus(lsTable)
-		}
-	})
-	lsSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
-			a.tvApp.SetFocus(lsTable)
-		}
-		return event
-	})
-	lsSearch.SetChangedFunc(func(prefixPatern string) {
-		a.state.LogStream.SetPrefixPattern(prefixPatern)
-		a.LoadLogStreams(state.Home)
-	})
 }
 
 func (a *App) setUpKeybindingLogEvent() {
@@ -334,22 +292,6 @@ func PrintStructFields(s interface{}) []string {
 		list[i] = fmt.Sprintf("%s: %v", typ.Field(i).Name, val.Field(i))
 	}
 	return list
-}
-
-func string2int(s string) int {
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		log.Fatalf("unable to list tables, %v", err)
-	}
-	return i
-}
-
-func string2month(s string) time.Month {
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		log.Fatalf("unable to list tables, %v", err)
-	}
-	return time.Month(i)
 }
 
 func getDaysByMonth(month string) []string {

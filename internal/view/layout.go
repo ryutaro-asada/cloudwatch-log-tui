@@ -35,8 +35,7 @@ func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
 			AddItem(w.LogGroup.Table, 0, 30, false).
 			AddItem(w.LogGroup.Search, 0, 1, false), 0, 10, true).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(w.LogStream.Table, 0, 30, true).
-			AddItem(w.LogStream.Search, 0, 1, false), 0, 10, false)
+			AddItem(w.LogStream.Table, 0, 1, true), 0, 10, false)
 }
 
 func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
