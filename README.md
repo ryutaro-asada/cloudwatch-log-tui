@@ -2,6 +2,7 @@
 
 A Command Line Interface (CLI) tool for viewing AWS CloudWatch Logs with a text-based user interface (TUI).
 
+<img width="1910" height="989" alt="cloudwatch-log-tui" src="https://github.com/user-attachments/assets/3c9c1149-dfbd-46b0-83aa-83da467bb991" />
 
 ### 🚀 Features
 
