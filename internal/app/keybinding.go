@@ -100,8 +100,11 @@ func (a *App) setUpKeybindingLogStream() {
 		row, _ := lsTable.GetSelection()
 		switch event.Rune() {
 		case 'k', 'j':
-			// up/down
-			lsTable.Select(row%max, 0)
+			// vim-style up/down navigation
+			// wait for table to be updated
+			if max > 0 {
+			        lsTable.Select(row%max, 0)
+			}
 
 		}
 
@@ -289,7 +292,7 @@ func (a *App) setUpKeybindingLogEvent() {
 
 // PrintStructFields returns a string slice containing field names and values of a struct.
 // It uses reflection to inspect the struct and format each field as "Name: Value".
-func PrintStructFields(s interface{}) []string {
+func PrintStructFields(s any) []string {
 	typ := reflect.TypeOf(s)
 	val := reflect.ValueOf(s)
 
