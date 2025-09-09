@@ -1,3 +1,4 @@
+// Package state manages the application state for the CloudWatch Log TUI.
 package state
 
 import (
@@ -7,6 +8,8 @@ import (
 	awsr "github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
 )
 
+// LogGroup manages the state for CloudWatch log groups,
+// including pagination, filtering, and navigation state.
 type LogGroup struct {
 	filterPatern string
 	currentPage  int
@@ -16,6 +19,8 @@ type LogGroup struct {
 	mu           sync.RWMutex
 }
 
+// BeforeGet prepares the input parameters before fetching log groups.
+// It sets the filter pattern and pagination token based on the navigation direction.
 func (l *LogGroup) BeforeGet(input *awsr.LogGroupInput, direct Direction) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -33,15 +38,12 @@ func (l *LogGroup) BeforeGet(input *awsr.LogGroupInput, direct Direction) {
 	}
 }
 
+// AfterGet updates the state after fetching log groups.
+// It manages pagination tokens and updates navigation flags based on the results.
 func (l *LogGroup) AfterGet(output *awsr.LogGroupOutput, direct Direction) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	// // ✅ nil チェックして初期化（必要に応じて）
-	// if l.pageTokens == nil {
-	// 	l.pageTokens = make(map[int]*string)
-	// 	log.Println("pageTokens is nil, initializing")
-	// }
 
 	switch direct {
 	case Next:
@@ -66,6 +68,7 @@ func (l *LogGroup) AfterGet(output *awsr.LogGroupOutput, direct Direction) {
 	}
 }
 
+// HasPrev returns true if there is a previous page of log groups available.
 func (l *LogGroup) HasPrev() bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -73,6 +76,7 @@ func (l *LogGroup) HasPrev() bool {
 	return l.hasPrev
 }
 
+// HasNext returns true if there is a next page of log groups available.
 func (l *LogGroup) HasNext() bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -80,6 +84,8 @@ func (l *LogGroup) HasNext() bool {
 	return l.hasNext
 }
 
+// SetFilterPattern updates the filter pattern for log group queries.
+// The filter pattern is used to search for specific log groups.
 func (l *LogGroup) SetFilterPattern(filterPatern string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
