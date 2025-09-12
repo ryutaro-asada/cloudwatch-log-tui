@@ -1,3 +1,4 @@
+// Package view manages the user interface components for the CloudWatch Log TUI.
 package view
 
 import (
@@ -36,9 +37,9 @@ const (
 	ViewLog
 )
 
-// Name mappings for enums
-var (
-	WidgetNames = map[Widget]string{
+// WidgetNames provides string identifiers for each widget type.
+// These are used for labeling and widget identification.
+var WidgetNames = map[Widget]string{
 		LogGroupTable:       "LogGroupTable",
 		LogGroupSearch:      "LogGroupSearch",
 		LogStreamTable:      "LogStreamTable",
@@ -58,8 +59,8 @@ var (
 		BackButton:          "Back",
 		ViewLog:             "ViewLog",
 	}
-)
 
+// Widgets contains all UI widget components organized by feature area.
 type Widgets struct {
 	LogGroup  logGroupWidget
 	LogStream logStreamWidget
@@ -91,12 +92,14 @@ type logEventWidget struct {
 	ViewLog      *tview.TextView
 }
 
+// setUp initializes all widget groups with their default configurations.
 func (w *Widgets) setUp() {
 	w.LogGroup.setUp()
 	w.LogStream.setUp()
 	w.LogEvent.setUp()
 }
 
+// setUp initializes the log group widget with a table and search field.
 func (l *logGroupWidget) setUp() {
 	table := tview.NewTable().
 		SetSelectable(true, false).
@@ -118,6 +121,7 @@ func (l *logGroupWidget) setUp() {
 	l.Search = search
 }
 
+// setUp initializes the log stream widget with a selectable table.
 func (l *logStreamWidget) setUp() {
 	table := tview.NewTable().
 		SetSelectable(true, false).
@@ -130,6 +134,8 @@ func (l *logStreamWidget) setUp() {
 	l.Table = table
 }
 
+// dropDownOptions generates the option lists for all dropdown widgets.
+// It creates arrays for months, days, hours, and minutes.
 func dropDownOptions() map[Widget][]string {
 	var months []string
 	for i := 1; i <= 12; i++ {
@@ -164,6 +170,8 @@ func dropDownOptions() map[Widget][]string {
 	}
 }
 
+// setUp initializes the log event widget with date/time dropdowns,
+// filter inputs, action buttons, and a text viewer for log display.
 func (l *logEventWidget) setUp() {
 	optons := dropDownOptions()
 	l.StartYear = tview.NewDropDown().

@@ -1,3 +1,5 @@
+// Package config provides configuration management for the CloudWatch Log TUI application.
+// It handles application settings, logging configuration, and other runtime parameters.
 package config
 
 import (

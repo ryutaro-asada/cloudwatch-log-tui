@@ -1,3 +1,5 @@
+// Package main provides the entry point for the CloudWatch Log TUI application.
+// This terminal-based user interface allows users to browse and search AWS CloudWatch logs interactively.
 package main
 
 import (
@@ -12,6 +14,9 @@ import (
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/state"
 )
 
+// main initializes the application configuration, sets up AWS client connections,
+// and launches the terminal user interface for browsing CloudWatch logs.
+// It handles graceful shutdown on interrupt signals.
 func main() {
 	// Initialize configuration
 	cfg := config.New()

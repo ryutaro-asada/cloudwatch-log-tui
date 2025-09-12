@@ -1,3 +1,4 @@
+// Package state manages the application state for the CloudWatch Log TUI.
 package state
 
 import (
@@ -12,6 +13,8 @@ import (
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
 )
 
+// LogEvent manages the state for CloudWatch log events,
+// including time range, selected streams, filtering options, and output settings.
 type LogEvent struct {
 	startYear          int
 	startMonth         int
@@ -32,6 +35,8 @@ type LogEvent struct {
 	mu                 sync.RWMutex
 }
 
+// SetLogGroupSelected updates the currently selected log group name
+// from which log events will be fetched.
 func (l *LogEvent) SetLogGroupSelected(logGroupName string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -39,6 +44,7 @@ func (l *LogEvent) SetLogGroupSelected(logGroupName string) {
 	l.logGroupName = logGroupName
 }
 
+// GetLogStreamsSelected returns the list of currently selected log stream names.
 func (l *LogEvent) GetLogStreamsSelected() []string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -46,6 +52,8 @@ func (l *LogEvent) GetLogStreamsSelected() []string {
 	return l.logStreamNames
 }
 
+// GetStartTime returns the start time components (year, month, day, hour, minute)
+// for the log event time range.
 func (l *LogEvent) GetStartTime() (int, int, int, int, int) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -53,6 +61,8 @@ func (l *LogEvent) GetStartTime() (int, int, int, int, int) {
 	return l.startYear, l.startMonth, l.startDay, l.startHour, l.startMinute
 }
 
+// GetEndTime returns the end time components (year, month, day, hour, minute)
+// for the log event time range.
 func (l *LogEvent) GetEndTime() (int, int, int, int, int) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -60,6 +70,8 @@ func (l *LogEvent) GetEndTime() (int, int, int, int, int) {
 	return l.endYear, l.endMonth, l.endDay, l.endHour, l.endMinute
 }
 
+// GetCurrntState returns a copy of the current LogEvent state.
+// Note: This function name contains a typo (should be GetCurrentState).
 func (l *LogEvent) GetCurrntState() LogEvent {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -84,6 +96,8 @@ func (l *LogEvent) GetCurrntState() LogEvent {
 	}
 }
 
+// SetLogStreamsSelected updates the list of selected log streams
+// from which log events will be fetched.
 func (l *LogEvent) SetLogStreamsSelected(logStreamNames []string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -91,6 +105,8 @@ func (l *LogEvent) SetLogStreamsSelected(logStreamNames []string) {
 	l.logStreamNames = logStreamNames
 }
 
+// SetFilterPatern updates the filter pattern used to search log events.
+// Note: This function name contains a typo (should be SetFilterPattern).
 func (l *LogEvent) SetFilterPatern(filterPatern string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -98,6 +114,7 @@ func (l *LogEvent) SetFilterPatern(filterPatern string) {
 	l.filterPatern = filterPatern
 }
 
+// SetOutputFile sets the output file path where log events will be saved.
 func (l *LogEvent) SetOutputFile(outputFile string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -105,6 +122,8 @@ func (l *LogEvent) SetOutputFile(outputFile string) {
 	l.outputFile = outputFile
 }
 
+// SetDefaultTime sets the time range to default values:
+// start time is one hour before current time, end time is current time.
 func (l *LogEvent) SetDefaultTime() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -125,6 +144,8 @@ func (l *LogEvent) SetDefaultTime() {
 	l.endMinute = now.Minute()
 }
 
+// BeforeGet prepares the input parameters before fetching log events.
+// It validates the state and sets all necessary query parameters.
 func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -139,6 +160,8 @@ func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) {
 	input.EndTime = time.Date(l.endYear, time.Month(l.endMonth), l.endDay, l.endHour, l.endMinute, 0, 0, time.Local)
 }
 
+// isInValid checks if the LogEvent state has invalid or missing required fields.
+// Returns true if any time component is zero or log group name is empty.
 func (l *LogEvent) isInValid() bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -158,6 +181,8 @@ func (l *LogEvent) isInValid() bool {
 		l.endMinute == 0
 }
 
+// SetTime updates a specific time component based on the widget label.
+// It converts the text value to integer and updates the corresponding field.
 func (l *LogEvent) SetTime(label string, text string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -186,6 +211,8 @@ func (l *LogEvent) SetTime(label string, text string) {
 	}
 }
 
+// string2int converts a string to integer.
+// It terminates the program if conversion fails.
 func string2int(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
@@ -194,6 +221,8 @@ func string2int(s string) int {
 	return i
 }
 
+// Print displays the current log event settings in the provided text view.
+// It shows log group, streams, filter pattern, time range, and other query parameters.
 func (l *LogEvent) Print(textView *tview.TextView) {
 	fmt.Fprintf(textView, "------------------------------------- \n")
 	fmt.Fprintf(textView, "[YOUR SETTING]\n")

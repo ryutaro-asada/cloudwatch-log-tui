@@ -1,3 +1,5 @@
+// Package app provides the main application logic for the CloudWatch Log TUI.
+// It manages the user interface, AWS client interactions, and state management.
 package app
 
 import (
@@ -31,6 +33,8 @@ type App struct {
 	ctx       context.Context
 }
 
+// Run starts the TUI application and runs the main event loop.
+// It returns an error if the application fails to start or encounters a fatal error.
 func (a *App) Run() error {
 	return a.tvApp.SetRoot(a.view.Pages, true).
 		EnableMouse(true).
@@ -38,7 +42,8 @@ func (a *App) Run() error {
 		Run()
 }
 
-// New creates a new UI application
+// New creates a new App instance with the provided context and AWS client.
+// It initializes the application state, view components, and key bindings.
 func New(ctx context.Context, awsClient *awsr.Client) *App {
 	app := &App{
 		tvApp:     tview.NewApplication(),
@@ -51,7 +56,8 @@ func New(ctx context.Context, awsClient *awsr.Client) *App {
 	return app
 }
 
-// LoadLogGroups loads and displays the log groups
+// LoadLogGroups fetches log groups from AWS CloudWatch based on the navigation direction.
+// It runs asynchronously and updates the UI when the data is loaded.
 func (a *App) LoadLogGroups(direct state.Direction) {
 	go func() {
 		input := &awsr.LogGroupInput{
@@ -72,7 +78,8 @@ func (a *App) LoadLogGroups(direct state.Direction) {
 	}()
 }
 
-// loadLogStreams loads and displays the log streams for a given group
+// LoadLogStreams fetches log streams for the selected log group based on the navigation direction.
+// It runs asynchronously and updates the UI when the data is loaded.
 func (a *App) LoadLogStreams(direct state.Direction) {
 	go func() {
 		input := &awsr.LogStreamInput{
@@ -93,7 +100,8 @@ func (a *App) LoadLogStreams(direct state.Direction) {
 	}()
 }
 
-// loadLogEvents loads and displays the log events
+// LoadLogEvents fetches log events from the selected log streams within the specified time range.
+// It displays the events in the log viewer and runs asynchronously.
 func (a *App) LoadLogEvents() {
 	textView := a.view.Widgets.LogEvent.ViewLog
 	textView.Clear()
@@ -138,27 +146,6 @@ func (a *App) setDefaultDropDownLogEvents() {
 		SetCurrentOption(endHour)
 	a.view.Widgets.LogEvent.EndMinute.
 		SetCurrentOption(endMinute)
-}
-
-func (a *App) refreshLogStreamTable() {
-	lsTable := a.view.Widgets.LogStream.Table
-	lsNames := make([]string, 0)
-	lsLastEvents := make([]string, 0)
-	lsFirstEvents := make([]string, 0)
-
-	for i := 0; i < lsTable.GetRowCount(); i++ {
-		lsName := lsTable.GetCell(i, 1).Text
-		lsLastEvent := lsTable.GetCell(i, 2).Text
-		lsFirstEvent := lsTable.GetCell(i, 3).Text
-		if lsName == "" || lsName == "All Log Streams" || lsName == NextPage || lsName == PrevPage {
-			continue
-		}
-		lsNames = append(lsNames, lsName)
-		lsLastEvents = append(lsLastEvents, lsLastEvent)
-		lsFirstEvents = append(lsFirstEvents, lsFirstEvent)
-	}
-	lsOutput := a.awsClient.SetLogStreamOutput(lsNames, lsLastEvents, lsFirstEvents)
-	a.setLogStreamToGui(lsOutput)
 }
 
 // setLogGroupToGui sets the log group data to the GUI
@@ -364,6 +351,8 @@ func (a *App) setLogEventToGui(output *awsr.LogEventOutput) {
 	}
 }
 
+// initTableRowPosition sets the initial row selection position in a table
+// based on the navigation direction (Next, Prev, or Home).
 func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 	var selectRow int
 	switch direct {
@@ -378,6 +367,8 @@ func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
 	table.Select(selectRow, 0)
 }
 
+// SaveLogEvents writes the log events to a file based on the current query parameters.
+// It runs asynchronously and displays a completion message when finished.
 func (a *App) SaveLogEvents() {
 	textView := a.view.Widgets.LogEvent.ViewLog
 	textView.Clear()

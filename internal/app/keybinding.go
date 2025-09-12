@@ -1,3 +1,4 @@
+// Package app provides the main application logic for the CloudWatch Log TUI.
 package app
 
 import (
@@ -14,13 +15,16 @@ import (
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
 )
 
-// setupKeyBindings initializes the keyboard shortcuts
+// setUpKeyBindings initializes keyboard shortcuts for all UI components.
+// It configures navigation, selection, and action key bindings.
 func (a *App) setUpKeyBindings() {
 	a.setUpKeybindingLogGroup()
 	a.setUpKeybindingLogStream()
 	a.setUpKeybindingLogEvent()
 }
 
+// setUpKeybindingLogGroup configures keyboard shortcuts for the log group interface.
+// It handles table navigation, search functionality, and group selection.
 func (a *App) setUpKeybindingLogGroup() {
 	lgTable := a.view.Widgets.LogGroup.Table
 	lgSearch := a.view.Widgets.LogGroup.Search
@@ -33,11 +37,11 @@ func (a *App) setUpKeybindingLogGroup() {
 
 		switch event.Rune() {
 		case 'k', 'j':
-			// up/down
+			// vim-style up/down navigation
 			// wait for table to be updated
-                        if max > 0 {
-                            lgTable.Select(row%max, 0)
-                        }
+			if max > 0 {
+				lgTable.Select(row%max, 0)
+			}
 		case '/':
 			a.tvApp.SetFocus(lgSearch)
 		}
@@ -85,6 +89,8 @@ func (a *App) setUpKeybindingLogGroup() {
 	})
 }
 
+// setUpKeybindingLogStream configures keyboard shortcuts for the log stream interface.
+// It handles stream selection, checkbox toggling, and navigation to log events.
 func (a *App) setUpKeybindingLogStream() {
 	lsTable := a.view.Widgets.LogStream.Table
 	lgTable := a.view.Widgets.LogGroup.Table
@@ -94,8 +100,11 @@ func (a *App) setUpKeybindingLogStream() {
 		row, _ := lsTable.GetSelection()
 		switch event.Rune() {
 		case 'k', 'j':
-			// up/down
-			lsTable.Select(row%max, 0)
+			// vim-style up/down navigation
+			// wait for table to be updated
+			if max > 0 {
+			        lsTable.Select(row%max, 0)
+			}
 
 		}
 
@@ -138,6 +147,8 @@ func (a *App) setUpKeybindingLogStream() {
 
 }
 
+// setUpKeybindingLogEvent configures keyboard shortcuts for the log event viewer.
+// It manages date/time selection, filtering, and navigation between form elements.
 func (a *App) setUpKeybindingLogEvent() {
 	dds := []*tview.DropDown{
 		a.view.Widgets.LogEvent.StartYear,
@@ -279,7 +290,9 @@ func (a *App) setUpKeybindingLogEvent() {
 	viewLog.SetScrollable(true)
 }
 
-func PrintStructFields(s interface{}) []string {
+// PrintStructFields returns a string slice containing field names and values of a struct.
+// It uses reflection to inspect the struct and format each field as "Name: Value".
+func PrintStructFields(s any) []string {
 	typ := reflect.TypeOf(s)
 	val := reflect.ValueOf(s)
 
@@ -294,6 +307,8 @@ func PrintStructFields(s interface{}) []string {
 	return list
 }
 
+// getDaysByMonth returns a string slice containing all valid days for a given month.
+// It calculates the correct number of days considering the month and year (2024).
 func getDaysByMonth(month string) []string {
 	var days []string
 	y := 2024

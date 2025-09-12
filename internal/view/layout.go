@@ -1,3 +1,4 @@
+// Package view manages the user interface components for the CloudWatch Log TUI.
 package view
 
 import (
@@ -8,27 +9,36 @@ import (
 type Layout int
 
 const (
+	// LogGroupLayout represents the log group selection layout
 	LogGroupLayout Layout = iota
+	// LogStreamLayout represents the log stream selection layout
 	LogStreamLayout
+	// LogEventLayout represents the log event viewing layout
 	LogEventLayout
 )
 
+// LayoutNames provides string identifiers for each layout type.
 var LayoutNames = map[Layout]string{
 	LogGroupLayout:  "LogGroup",
 	LogStreamLayout: "LogStream",
 	LogEventLayout:  "LogEvent",
 }
 
+// Layouts manages the different layout configurations for the application.
+// It contains the main layouts for log group/stream selection and log event viewing.
 type Layouts struct {
 	LogGroupAndStream *tview.Flex
 	LogEvent          *tview.Grid
 }
 
+// setUp initializes all layouts with their respective widget configurations.
 func (l *Layouts) setUp(w *Widgets) {
 	l.setUpLayoutLogGroupAndStream(w)
 	l.setUpLayoutLogEvent(w)
 }
 
+// setUpLayoutLogGroupAndStream creates the layout for log group and stream selection.
+// It arranges tables and search fields in a split view configuration.
 func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
 	l.LogGroupAndStream = tview.NewFlex().
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
@@ -38,6 +48,8 @@ func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
 			AddItem(w.LogStream.Table, 0, 1, true), 0, 10, false)
 }
 
+// setUpLayoutLogEvent creates the grid layout for the log event viewer.
+// It arranges date/time selectors, filter options, and the log display area.
 func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
 	l.LogEvent = tview.NewGrid().
 		SetRows(
@@ -99,7 +111,7 @@ func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
 			1, 1,
 			0, 100,
 			false).
-		// aditional input
+		// additional input
 		AddItem(w.LogEvent.FilterPatern,
 			2, 0,
 			1, 1,

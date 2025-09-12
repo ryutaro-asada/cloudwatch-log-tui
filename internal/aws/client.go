@@ -1,3 +1,5 @@
+// Package aws provides AWS CloudWatch Logs client functionality for the TUI application.
+// It handles all interactions with AWS CloudWatch Logs API.
 package aws
 
 import (
@@ -12,6 +14,7 @@ import (
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+// MaxItemsInLayout defines the maximum number of items to display per page in the UI layout.
 const MaxItemsInLayout int32 = 50
 
 // Client represents a CloudWatch Logs client
@@ -54,6 +57,8 @@ type LogEventOutput struct {
 	NextToken *string
 }
 
+// SetLogStreamOutput creates a LogStreamOutput from provided log stream names and event timestamps.
+// This is used to construct mock or cached log stream data for the UI.
 func (c *Client) SetLogStreamOutput(lsNames []string, lsLastEvent []string, lsFirstEvent []string) *LogStreamOutput {
 	lsOutput := &LogStreamOutput{}
 	for i := 0; i < len(lsNames); i++ {
@@ -68,7 +73,8 @@ func (c *Client) SetLogStreamOutput(lsNames []string, lsLastEvent []string, lsFi
 	return lsOutput
 }
 
-// NewClient creates a new CloudWatch Logs client
+// NewClient creates a new CloudWatch Logs client using the default AWS configuration.
+// It loads AWS credentials and region from the environment or AWS config files.
 func NewClient(ctx context.Context) (*Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -80,7 +86,8 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}, nil
 }
 
-// GetLogGroups retrieves all log groups
+// GetLogGroups retrieves log groups from CloudWatch Logs with optional filtering.
+// It supports pagination through the NextToken parameter.
 func (c *Client) GetLogGroups(input *LogGroupInput) (*LogGroupOutput, error) {
 	params := &cwl.DescribeLogGroupsInput{
 		Limit: aws.Int32(MaxItemsInLayout),
@@ -105,7 +112,8 @@ func (c *Client) GetLogGroups(input *LogGroupInput) (*LogGroupOutput, error) {
 	}, nil
 }
 
-// GetLogStreams retrieves log streams for a given log group
+// GetLogStreams retrieves log streams for a specified log group.
+// Results are ordered by last event time in descending order and support pagination.
 func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) {
 	params := &cwl.DescribeLogStreamsInput{
 		LogGroupName: aws.String(input.LogGroupName),
@@ -128,7 +136,8 @@ func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) 
 	}, nil
 }
 
-// GetLogEvents retrieves log events for a given log group and stream
+// GetLogEvents retrieves log events within the specified time range and filters.
+// It can filter by multiple log streams and supports pattern-based filtering.
 func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
 	params := &cwl.FilterLogEventsInput{
 		LogGroupName: aws.String(input.LogGroupName),
@@ -154,6 +163,8 @@ func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
 	}, nil
 }
 
+// WriteLogEvents fetches all log events matching the criteria and writes them to a file.
+// It uses pagination to retrieve all events without memory limitations.
 func (c *Client) WriteLogEvents(input *LogEventInput) error {
 	params := &cwl.FilterLogEventsInput{
 		LogGroupName: aws.String(input.LogGroupName),
@@ -192,7 +203,7 @@ func (c *Client) WriteLogEvents(input *LogEventInput) error {
 
 		for _, event := range res.Events {
 			message := aws.ToString(event.Message)
-			_, err := file.WriteString(message + "\n")
+			_, err := file.WriteString(message)
 			if err != nil {
 				return fmt.Errorf("failed to write log message: %v", err)
 			}
