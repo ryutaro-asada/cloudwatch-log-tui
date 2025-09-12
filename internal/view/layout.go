@@ -42,7 +42,7 @@ func (l *Layouts) setUp(w *Widgets) {
 func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
 	l.LogGroupAndStream = tview.NewFlex().
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(w.LogGroup.Table, 0, 30, false).
+			AddItem(w.LogGroup.Table, 0, 20, false).
 			AddItem(w.LogGroup.Search, 0, 1, false), 0, 10, true).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(w.LogStream.Table, 0, 1, true), 0, 10, false)
