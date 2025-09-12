@@ -203,7 +203,7 @@ func (c *Client) WriteLogEvents(input *LogEventInput) error {
 
 		for _, event := range res.Events {
 			message := aws.ToString(event.Message)
-			_, err := file.WriteString(message + "\n")
+			_, err := file.WriteString(message)
 			if err != nil {
 				return fmt.Errorf("failed to write log message: %v", err)
 			}
