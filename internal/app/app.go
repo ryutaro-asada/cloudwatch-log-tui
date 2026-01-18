@@ -125,7 +125,7 @@ func (a *App) LoadLogEvents() {
 func (a *App) setDefaultDropDownLogEvents() {
 	_, startMonth, startDay, startHour, startMinute := a.state.LogEvent.GetStartTime()
 	a.view.Widgets.LogEvent.StartYear.
-		SetCurrentOption(1)
+		SetCurrentOption(0)
 	a.view.Widgets.LogEvent.StartMonth.
 		SetCurrentOption(startMonth - 1)
 	a.view.Widgets.LogEvent.StartDay.
@@ -137,7 +137,7 @@ func (a *App) setDefaultDropDownLogEvents() {
 
 	_, endMonth, endDay, endHour, endMinute := a.state.LogEvent.GetEndTime()
 	a.view.Widgets.LogEvent.EndYear.
-		SetCurrentOption(1)
+		SetCurrentOption(0)
 	a.view.Widgets.LogEvent.EndMonth.
 		SetCurrentOption(endMonth - 1)
 	a.view.Widgets.LogEvent.EndDay.
