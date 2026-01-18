@@ -3,6 +3,7 @@ package view
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -40,25 +41,25 @@ const (
 // WidgetNames provides string identifiers for each widget type.
 // These are used for labeling and widget identification.
 var WidgetNames = map[Widget]string{
-		LogGroupTable:       "LogGroupTable",
-		LogGroupSearch:      "LogGroupSearch",
-		LogStreamTable:      "LogStreamTable",
-		StartYearDropDown:   "StartYear",
-		StartMonthDropDown:  "StartMonth",
-		StartDayDropDown:    "StartDay",
-		StartHourDropDown:   "StartHour",
-		StartMinuteDropDown: "StartMinute",
-		EndYearDropDown:     "EndYear",
-		EndMonthDropDown:    "EndMonth",
-		EndDayDropDown:      "EndDay",
-		EndHourDropDown:     "EndHour",
-		EndMinuteDropDown:   "EndMinute",
-		FilterPatternInput:  "FilterPattern",
-		OutputFileInput:     "OutputFile",
-		SaveEventLogButton:  "SaveEventLog",
-		BackButton:          "Back",
-		ViewLog:             "ViewLog",
-	}
+	LogGroupTable:       "LogGroupTable",
+	LogGroupSearch:      "LogGroupSearch",
+	LogStreamTable:      "LogStreamTable",
+	StartYearDropDown:   "StartYear",
+	StartMonthDropDown:  "StartMonth",
+	StartDayDropDown:    "StartDay",
+	StartHourDropDown:   "StartHour",
+	StartMinuteDropDown: "StartMinute",
+	EndYearDropDown:     "EndYear",
+	EndMonthDropDown:    "EndMonth",
+	EndDayDropDown:      "EndDay",
+	EndHourDropDown:     "EndHour",
+	EndMinuteDropDown:   "EndMinute",
+	FilterPatternInput:  "FilterPattern",
+	OutputFileInput:     "OutputFile",
+	SaveEventLogButton:  "SaveEventLog",
+	BackButton:          "Back",
+	ViewLog:             "ViewLog",
+}
 
 // Widgets contains all UI widget components organized by feature area.
 type Widgets struct {
@@ -72,7 +73,7 @@ type logGroupWidget struct {
 	Search *tview.InputField
 }
 type logStreamWidget struct {
-	Table  *tview.Table
+	Table *tview.Table
 }
 type logEventWidget struct {
 	StartYear    *tview.DropDown
@@ -155,14 +156,21 @@ func dropDownOptions() map[Widget][]string {
 	for i := 0; i <= 59; i++ {
 		minutes = append(minutes, fmt.Sprintf("%d", i))
 	}
+	currentYear := time.Now().Year()
+	listOfYears := []string{}
+	num := -9
+	for i := 0; i < 10; i++ {
+		num++
+		listOfYears = append(listOfYears, fmt.Sprintf("%d", currentYear+i))
+	}
 
 	return map[Widget][]string{
-		StartYearDropDown:   {"2024", "2025"},
+		StartYearDropDown:   listOfYears,
 		StartMonthDropDown:  months,
 		StartDayDropDown:    days,
 		StartHourDropDown:   hours,
 		StartMinuteDropDown: minutes,
-		EndYearDropDown:     {"2024", "2025"},
+		EndYearDropDown:     listOfYears,
 		EndMonthDropDown:    months,
 		EndDayDropDown:      days,
 		EndHourDropDown:     hours,
