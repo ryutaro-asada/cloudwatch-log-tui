@@ -365,3 +365,45 @@ func TestNewClientRegionAndProfile(t *testing.T) {
 		t.Error("unknown profile: want an error")
 	}
 }
+
+func TestNewestFirstSupported(t *testing.T) {
+	tests := []struct {
+		start time.Time
+		want  bool
+	}{
+		{time.Date(2023, 12, 31, 23, 59, 59, 999e6, time.UTC), false},
+		{time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), true},
+		{time.Date(2024, 1, 1, 8, 59, 0, 0, time.FixedZone("JST", 9*3600)), false},
+		{time.Date(2024, 1, 1, 9, 0, 0, 0, time.FixedZone("JST", 9*3600)), true},
+	}
+	for _, tt := range tests {
+		if got := NewestFirstSupported(tt.start); got != tt.want {
+			t.Errorf("NewestFirstSupported(%v) = %v, want %v", tt.start, got, tt.want)
+		}
+	}
+}
+
+func TestStartFromHeadParameter(t *testing.T) {
+	f := &fakeLogs{pages: map[string]string{"": eventsJSON(1, "a", "")}}
+	c := newTestClient(t, f)
+	input := eventInput()
+	input.OutputFile = filepath.Join(t.TempDir(), "out.txt")
+
+	if _, err := c.GetLogEvents(input); err != nil {
+		t.Fatal(err)
+	}
+	input.NewestFirst = true
+	if _, err := c.GetLogEvents(input); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.WriteLogEvents(input); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []any{nil, false, nil}
+	for i, w := range want {
+		if got := f.requests[i]["startFromHead"]; got != w {
+			t.Errorf("request %d: startFromHead = %v, want %v", i, got, w)
+		}
+	}
+}

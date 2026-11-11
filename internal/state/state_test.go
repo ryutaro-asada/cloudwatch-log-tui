@@ -243,3 +243,33 @@ func TestLogStreamGroupChangeResetsPages(t *testing.T) {
 		t.Errorf("Home input = %+v", in)
 	}
 }
+
+func TestBeforeGetOrder(t *testing.T) {
+	end := DateTime{2026, 1, 1, 10, 0}
+	tests := []struct {
+		name   string
+		start  time.Time
+		toggle bool
+		want   bool
+	}{
+		{"newest first by default", time.Date(2025, 6, 1, 0, 0, 0, 0, time.Local), false, true},
+		{"oldest first after toggle", time.Date(2025, 6, 1, 0, 0, 0, 0, time.Local), true, false},
+		{"falls back before 2024 UTC", time.Date(2023, 12, 31, 23, 59, 0, 0, time.UTC), false, false},
+		{"2024-01-01 UTC is supported", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), false, true},
+	}
+	for _, tt := range tests {
+		l := newLogEvent(dateTimeOf(tt.start.Local()), end)
+		if tt.toggle {
+			if got := l.ToggleOrder(); got != OldestFirst {
+				t.Errorf("%s: ToggleOrder = %v, want OldestFirst", tt.name, got)
+			}
+		}
+		var in awsr.LogEventInput
+		if err := l.BeforeGet(&in); err != nil {
+			t.Fatal(err)
+		}
+		if in.NewestFirst != tt.want {
+			t.Errorf("%s: NewestFirst = %v, want %v", tt.name, in.NewestFirst, tt.want)
+		}
+	}
+}

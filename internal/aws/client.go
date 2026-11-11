@@ -33,6 +33,18 @@ const (
 	maxLogGroupNamePatternLength = 512
 )
 
+// NewestFirstMinStart is the earliest start time for which FilterLogEvents
+// accepts startFromHead=false; earlier start times are rejected with
+// InvalidParameterException. See startFromHead in
+// https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_FilterLogEvents.html
+var NewestFirstMinStart = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// NewestFirstSupported reports whether events starting at start can be
+// fetched newest first.
+func NewestFirstSupported(start time.Time) bool {
+	return !start.Before(NewestFirstMinStart)
+}
+
 // See LogGroupNamePattern in
 // https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeLogGroups.html
 var logGroupNamePatternRegexp = regexp.MustCompile(`^[\.\-_/#A-Za-z0-9]*$`)
@@ -67,7 +79,8 @@ type LogStreamInput struct {
 }
 
 // LogEventInput holds the parameters for GetLogEvents and WriteLogEvents.
-// EndTime is inclusive.
+// EndTime is inclusive. NewestFirst makes GetLogEvents return the newest
+// events first; it requires NewestFirstSupported(StartTime).
 type LogEventInput struct {
 	LogGroupName   string
 	LogStreamNames []string
@@ -75,6 +88,7 @@ type LogEventInput struct {
 	EndTime        time.Time
 	FilterPattern  string
 	OutputFile     string
+	NewestFirst    bool
 	Ctx            context.Context
 }
 
@@ -253,10 +267,11 @@ func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) 
 	}
 }
 
-// GetLogEvents retrieves up to MaxLogEvents log events within the time range.
+// GetLogEvents retrieves up to MaxLogEvents log events within the time range,
+// the oldest or, with input.NewestFirst, the newest ones in that order.
 // It can filter by multiple log streams and supports pattern-based filtering.
 func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
-	params := filterLogEventsParams(input)
+	params := filterLogEventsParams(input, input.NewestFirst)
 	out := &LogEventOutput{}
 
 	// A FilterLogEvents page can be partially filled or empty while more
@@ -280,7 +295,8 @@ func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
 }
 
 // WriteLogEvents fetches all log events matching the input and writes them to
-// input.OutputFile (DefaultOutputFile when empty), one event per line.
+// input.OutputFile (DefaultOutputFile when empty), one event per line, oldest
+// first regardless of input.NewestFirst.
 // It returns the absolute path written and the number of events.
 // The file is replaced only when every event was written; on error an
 // existing file is left untouched.
@@ -306,7 +322,7 @@ func (c *Client) WriteLogEvents(input *LogEventInput) (path string, count int, e
 	}()
 
 	w := bufio.NewWriter(tmp)
-	paginator := cwl.NewFilterLogEventsPaginator(c.cwl, filterLogEventsParams(input), func(o *cwl.FilterLogEventsPaginatorOptions) {
+	paginator := cwl.NewFilterLogEventsPaginator(c.cwl, filterLogEventsParams(input, false), func(o *cwl.FilterLogEventsPaginatorOptions) {
 		o.Limit = 10000
 	})
 	for paginator.HasMorePages() {
@@ -334,11 +350,14 @@ func (c *Client) WriteLogEvents(input *LogEventInput) (path string, count int, e
 	return path, count, nil
 }
 
-func filterLogEventsParams(input *LogEventInput) *cwl.FilterLogEventsInput {
+func filterLogEventsParams(input *LogEventInput, newestFirst bool) *cwl.FilterLogEventsInput {
 	params := &cwl.FilterLogEventsInput{
 		LogGroupName: aws.String(input.LogGroupName),
 		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
 		EndTime:      aws.Int64(input.EndTime.UnixMilli()),
+	}
+	if newestFirst {
+		params.StartFromHead = aws.Bool(false)
 	}
 	if len(input.LogStreamNames) > 0 {
 		params.LogStreamNames = input.LogStreamNames

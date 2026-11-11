@@ -41,7 +41,9 @@ type logEventWidget struct {
 	OutputFile    *tview.InputField
 	SaveEventLog  *tview.Button
 	Back          *tview.Button
-	ViewLog       *tview.TextView
+	// Hints shows the event order and the keys that change the query.
+	Hints   *tview.TextView
+	ViewLog *tview.TextView
 }
 
 // NumberOptions returns the decimal strings from..to (inclusive), for use as
@@ -130,5 +132,6 @@ func (l *logEventWidget) setUp() {
 	l.SaveEventLog = tview.NewButton("Save Button")
 	l.Back = tview.NewButton("Back Button")
 
+	l.Hints = tview.NewTextView().SetDynamicColors(true)
 	l.ViewLog = tview.NewTextView().SetScrollable(true)
 }

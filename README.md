@@ -87,12 +87,18 @@ Selecting another log group clears the selection.
 | Back to Log Group Panel (from a closed dropdown) | Esc |
 | Apply Filter Pattern        | Enter  |
 | Press Button                | Enter  |
+| Toggle newest first / oldest first | o |
 
 Changing a dropdown reloads the events. The filter pattern is applied when you press Enter in the filter field.
-The view shows at most 1000 events.
+The view shows at most 1000 events: the newest ones, newest at the top, by default, or the oldest ones after pressing `o`.
+The line above the events shows the current order.
+`o` does nothing while you type in a text field or while a dropdown is open.
+
+CloudWatch Logs can return the newest events first only when the start time is on or after 2024-01-01 00:00 UTC.
+For an earlier start time the events are shown oldest first, and the order line says so.
 
 `Save Button` writes all events of the current query to the file in `Write Output File`
-(default: `output.txt` in the current directory), one event per line.
+(default: `output.txt` in the current directory), one event per line, oldest first regardless of the view order.
 The status line at the bottom shows the absolute path and the number of events when the save is done.
 
 ### 📝 Log file

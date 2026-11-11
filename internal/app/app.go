@@ -234,12 +234,16 @@ func (a *App) LoadLogEvents() {
 	textView.Clear()
 
 	input := &awsr.LogEventInput{}
+	requested := a.state.LogEvent.Order()
 	if err := a.state.LogEvent.BeforeGet(input); err != nil {
 		a.logEventReq.abort()
+		a.setHints(requested, requested == state.NewestFirst)
 		log.Print(err)
 		fmt.Fprintf(textView, "Error: %v\n", err)
 		return
 	}
+	a.setHints(requested, input.NewestFirst)
+	order := orderText(requested, input.NewestFirst)
 	ctx, gen := a.logEventReq.start(a.ctx)
 	input.Ctx = ctx
 	fmt.Fprintln(textView, "Now Loading... ")
@@ -253,11 +257,11 @@ func (a *App) LoadLogEvents() {
 			if err != nil {
 				log.Print(err)
 				textView.Clear()
-				writeQuery(textView, input)
+				writeQuery(textView, input, order)
 				fmt.Fprintf(textView, "Error: %v\n", err)
 				return
 			}
-			a.setLogEventToGui(input, output)
+			a.setLogEventToGui(input, output, order)
 		})
 	}()
 }

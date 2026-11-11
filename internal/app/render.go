@@ -175,8 +175,22 @@ func (a *App) setLogStreamToGui() {
 	}
 }
 
+// orderText describes the order of events fetched with newestFirst when
+// requested was asked for.
+func orderText(requested state.Order, newestFirst bool) string {
+	switch {
+	case newestFirst:
+		return "newest first"
+	case requested == state.NewestFirst:
+		return "oldest first (newest first needs a start time on or after " +
+			awsr.NewestFirstMinStart.Format("2006-01-02 15:04 MST") + ")"
+	default:
+		return "oldest first"
+	}
+}
+
 // writeQuery prints the parameters of a log event request.
-func writeQuery(w io.Writer, input *awsr.LogEventInput) {
+func writeQuery(w io.Writer, input *awsr.LogEventInput, order string) {
 	const layout = "2006-01-02 15:04"
 	streams := "ALL"
 	if len(input.LogStreamNames) > 0 {
@@ -191,14 +205,15 @@ func writeQuery(w io.Writer, input *awsr.LogEventInput) {
 	fmt.Fprintf(w, "%s\n", input.StartTime.Format(layout))
 	fmt.Fprintf(w, "    ~     \n")
 	fmt.Fprintf(w, "%s\n", input.EndTime.Format(layout))
+	fmt.Fprintf(w, "Order: %s\n", order)
 	fmt.Fprintf(w, "MaxEvent: %d\n", awsr.MaxLogEvents)
-	fmt.Fprintf(w, "You can get all log events by pressing 'Save Button'.\n")
+	fmt.Fprintf(w, "You can get all log events, oldest first, by pressing 'Save Button'.\n")
 	fmt.Fprintf(w, "------------------------------------- \n")
 }
 
-func (a *App) setLogEventToGui(input *awsr.LogEventInput, output *awsr.LogEventOutput) {
+func (a *App) setLogEventToGui(input *awsr.LogEventInput, output *awsr.LogEventOutput, order string) {
 	var b strings.Builder
-	writeQuery(&b, input)
+	writeQuery(&b, input, order)
 
 	if len(output.LogEvents) == 0 {
 		b.WriteString("no events\n")
@@ -208,12 +223,24 @@ func (a *App) setLogEventToGui(input *awsr.LogEventInput, output *awsr.LogEventO
 	}
 	if output.NextToken != nil {
 		fmt.Fprintf(&b, "------------------------------------- \n")
-		fmt.Fprintf(&b, "Showing the first %d events. Press 'Save Button' to get all of them.\n", len(output.LogEvents))
+		which := "oldest"
+		if input.NewestFirst {
+			which = "newest"
+		}
+		fmt.Fprintf(&b, "Showing the %s %d events. Press 'Save Button' to get all of them.\n", which, len(output.LogEvents))
 	}
 
 	textView := a.view.Widgets.LogEvent.ViewLog
 	textView.SetText(b.String())
 	textView.ScrollToBeginning()
+}
+
+func (a *App) setHints(requested state.Order, newestFirst bool) {
+	order := tview.Escape(orderText(requested, newestFirst))
+	if requested == state.NewestFirst && !newestFirst {
+		order = "[yellow]" + order + "[-]"
+	}
+	a.view.Widgets.LogEvent.Hints.SetText("Order [o]: " + order)
 }
 
 // initTableRowPosition selects a row after a page was loaded: the first item

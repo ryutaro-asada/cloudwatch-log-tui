@@ -229,6 +229,36 @@ func (a *App) setUpKeybindingLogEvent() {
 		}
 		return event
 	})
+	a.view.Layouts.LogEvent.SetInputCapture(a.logEventPageInputCapture)
+}
+
+// logEventPageInputCapture handles the keys that work anywhere on the log
+// event page. It runs before the focused widget, so it leaves keys alone
+// while the user types in an input field or picks from an open drop-down.
+func (a *App) logEventPageInputCapture(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() != tcell.KeyRune || !a.pageKeysEnabled() {
+		return event
+	}
+	switch event.Rune() {
+	case 'o':
+		a.state.LogEvent.ToggleOrder()
+		a.LoadLogEvents()
+	default:
+		return event
+	}
+	return nil
+}
+
+func (a *App) pageKeysEnabled() bool {
+	if _, typing := a.tvApp.GetFocus().(*tview.InputField); typing {
+		return false
+	}
+	for _, t := range a.timeDropDowns() {
+		if t.dd.IsOpen() {
+			return false
+		}
+	}
+	return true
 }
 
 // dropDownInputCapture handles keys on a time drop-down. While the list is

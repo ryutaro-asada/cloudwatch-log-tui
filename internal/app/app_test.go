@@ -538,3 +538,47 @@ func TestHeaderShowsAccount(t *testing.T) {
 		})
 	}
 }
+
+func TestOrderToggle(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != false {
+		t.Errorf("default startFromHead = %v, want false (newest first)", got)
+	}
+	if !strings.Contains(h.viewLog(), "Order: newest first") {
+		t.Errorf("view does not show the order:\n%s", h.viewLog())
+	}
+
+	n := len(h.fake.callsOf("FilterLogEvents"))
+	h.typeText("o")
+	h.waitCalls("FilterLogEvents", n+1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != nil {
+		t.Errorf("after toggle startFromHead = %v, want unset (oldest first)", got)
+	}
+	h.waitViewLog("Order: oldest first")
+
+	h.ui(func() { h.app.tvApp.SetFocus(h.app.view.Widgets.LogEvent.FilterPattern) })
+	h.typeText("o")
+	h.waitFor("typed filter", func() bool { return h.app.view.Widgets.LogEvent.FilterPattern.GetText() == "o" })
+	if h.app.state.LogEvent.Order() != state.OldestFirst {
+		t.Error("typing o in the filter field toggled the order")
+	}
+}
+
+func TestNewestFirstFallsBackBefore2024(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	n := len(h.fake.callsOf("FilterLogEvents"))
+	h.ui(func() {
+		h.app.state.LogEvent.SetTime(state.Start, state.Year, 2023)
+		h.app.LoadLogEvents()
+	})
+	h.waitCalls("FilterLogEvents", n+1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != nil {
+		t.Errorf("startFromHead = %v, want unset for a start time before 2024", got)
+	}
+	h.waitViewLog("Order: oldest first (newest first needs a start time on or after 2024-01-01 00:00 UTC)")
+	h.waitFor("fallback hint", func() bool {
+		return strings.Contains(h.app.view.Widgets.LogEvent.Hints.GetText(true), "newest first needs")
+	})
+}
