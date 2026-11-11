@@ -2,10 +2,7 @@
 package app
 
 import (
-	"fmt"
 	"log"
-	"reflect"
-	"slices"
 	"strconv"
 	"time"
 
@@ -14,6 +11,41 @@ import (
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/state"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
 )
+
+// yearsShown is the number of years, up to the current one, offered in the
+// year drop-downs.
+const yearsShown = 10
+
+// timeDropDown binds a drop-down to the time component it edits.
+type timeDropDown struct {
+	dd    *tview.DropDown
+	bound state.Bound
+	field state.TimeField
+}
+
+// timeDropDowns returns the time drop-downs in focus order.
+func (a *App) timeDropDowns() []timeDropDown {
+	w := a.view.Widgets.LogEvent
+	return []timeDropDown{
+		{w.StartYear, state.Start, state.Year},
+		{w.StartMonth, state.Start, state.Month},
+		{w.StartDay, state.Start, state.Day},
+		{w.StartHour, state.Start, state.Hour},
+		{w.StartMinute, state.Start, state.Minute},
+		{w.EndYear, state.End, state.Year},
+		{w.EndMonth, state.End, state.Month},
+		{w.EndDay, state.End, state.Day},
+		{w.EndHour, state.End, state.Hour},
+		{w.EndMinute, state.End, state.Minute},
+	}
+}
+
+func (a *App) dayDropDown(b state.Bound) *tview.DropDown {
+	if b == state.Start {
+		return a.view.Widgets.LogEvent.StartDay
+	}
+	return a.view.Widgets.LogEvent.EndDay
+}
 
 // setUpKeyBindings initializes keyboard shortcuts for all UI components.
 // It configures navigation, selection, and action key bindings.
@@ -30,58 +62,45 @@ func (a *App) setUpKeybindingLogGroup() {
 	lgSearch := a.view.Widgets.LogGroup.Search
 	lsTable := a.view.Widgets.LogStream.Table
 
-	// log group table
 	lgTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		row, _ := lgTable.GetSelection()
-		max := lgTable.GetRowCount()
-
-		switch event.Rune() {
-		case 'k', 'j':
-			// vim-style up/down navigation
-			// wait for table to be updated
-			if max > 0 {
-				lgTable.Select(row%max, 0)
-			}
-		case '/':
+		switch {
+		case event.Key() == tcell.KeyRune && event.Rune() == '/':
 			a.tvApp.SetFocus(lgSearch)
-		}
-
-		if event.Key() == tcell.KeyTab {
+			return nil
+		case event.Key() == tcell.KeyTab:
 			a.tvApp.SetFocus(lsTable)
+			return nil
 		}
-
 		return event
 	})
 	lgTable.SetSelectedFunc(func(row, _ int) {
-		cell := lgTable.GetCell(row, 0)
-		groupName := cell.Text
-
-		a.state.LogEvent.SetLogGroupSelected(groupName)
+		ref, ok := rowRefAt(lgTable, row)
+		if !ok || ref.kind != rowItem {
+			return
+		}
+		a.state.LogEvent.SetLogGroupSelected(ref.name)
+		a.state.LogStream.SetLogGroupSelected(ref.name)
+		// Drop the previous group's streams right away so they cannot be
+		// selected for the new group while its streams are loading.
+		a.logStreams = nil
+		a.setLogStreamToGui()
 		a.tvApp.SetFocus(lsTable)
-		a.state.LogStream.SetLogGroupSelected(groupName)
 		a.LoadLogStreams(state.Home)
 	})
-
-	// Search form
 	lgTable.SetSelectionChangedFunc(func(row, _ int) {
-		cell := lgTable.GetCell(row, 0)
-		switch cell.Text {
-		case NextPage:
+		ref, _ := rowRefAt(lgTable, row)
+		switch ref.kind {
+		case rowNext:
 			a.LoadLogGroups(state.Next)
-		case PrevPage:
+		case rowPrev:
 			a.LoadLogGroups(state.Prev)
 		}
 	})
+
 	lgSearch.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
+		if key == tcell.KeyEnter || key == tcell.KeyEscape {
 			a.tvApp.SetFocus(lgTable)
 		}
-	})
-	lgSearch.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
-			a.tvApp.SetFocus(lgTable)
-		}
-		return event
 	})
 	lgSearch.SetChangedFunc(func(pattern string) {
 		a.state.LogGroup.SetFilterPattern(pattern)
@@ -90,241 +109,239 @@ func (a *App) setUpKeybindingLogGroup() {
 }
 
 // setUpKeybindingLogStream configures keyboard shortcuts for the log stream interface.
-// It handles stream selection, checkbox toggling, and navigation to log events.
+// It handles stream selection and navigation to log events.
 func (a *App) setUpKeybindingLogStream() {
 	lsTable := a.view.Widgets.LogStream.Table
 	lgTable := a.view.Widgets.LogGroup.Table
 
 	lsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		max := lsTable.GetRowCount()
-		row, _ := lsTable.GetSelection()
-		switch event.Rune() {
-		case 'k', 'j':
-			// vim-style up/down navigation
-			// wait for table to be updated
-			if max > 0 {
-			        lsTable.Select(row%max, 0)
-			}
-
-		}
-
 		if event.Key() == tcell.KeyTab {
 			a.tvApp.SetFocus(lgTable)
+			return nil
 		}
-
 		return event
 	})
 
-	// when table is selected (enter key pressed)
-	lsTable.SetSelectedFunc(func(row, col int) {
-		cell := lsTable.GetCell(row, 1)
-		logStreamName := cell.Text
-		if logStreamName == "All Log Streams" {
-			a.state.LogEvent.SetLogStreamsSelected([]string{})
-		} else {
-			a.state.LogEvent.SetLogStreamsSelected(
-				slices.Compact(
-					append(a.state.LogEvent.GetLogStreamsSelected(),
-						logStreamName)))
+	lsTable.SetSelectedFunc(func(row, _ int) {
+		ref, ok := rowRefAt(lsTable, row)
+		if !ok {
+			return
 		}
-		a.state.LogEvent.SetDefaultTime()
-		a.setDefaultDropDownLogEvents()
-		a.LoadLogEvents()
-		a.view.Pages.SwitchToPage(view.PageNames[view.LogEventPage])
-		a.tvApp.SetFocus(a.view.Widgets.LogEvent.StartYear)
+		switch ref.kind {
+		case rowAllStreams:
+			a.state.LogEvent.ClearLogStreams()
+		case rowItem:
+			if err := a.state.LogEvent.AddLogStream(ref.name); err != nil {
+				a.showError(err)
+				return
+			}
+		default:
+			return
+		}
+		a.setLogStreamToGui()
+		a.openLogEvents()
 	})
 
-	// when table is focused
-	lsTable.SetSelectionChangedFunc(func(row, column int) {
-		cell := lsTable.GetCell(row, 1)
-		switch cell.Text {
-		case NextPage:
+	lsTable.SetSelectionChangedFunc(func(row, _ int) {
+		ref, _ := rowRefAt(lsTable, row)
+		switch ref.kind {
+		case rowNext:
 			a.LoadLogStreams(state.Next)
-		case PrevPage:
+		case rowPrev:
 			a.LoadLogStreams(state.Prev)
 		}
 	})
+}
 
+func (a *App) openLogEvents() {
+	a.state.LogEvent.SetDefaultTime()
+	a.setDefaultDropDownLogEvents()
+	a.view.Pages.SwitchToPage(view.PageNames[view.LogEventPage])
+	a.tvApp.SetFocus(a.view.Widgets.LogEvent.StartYear)
+	a.LoadLogEvents()
+}
+
+func (a *App) showLogGroupPage() {
+	a.view.Pages.SwitchToPage(view.PageNames[view.LogGroupAndStreamPage])
+	a.tvApp.SetFocus(a.view.Widgets.LogStream.Table)
 }
 
 // setUpKeybindingLogEvent configures keyboard shortcuts for the log event viewer.
 // It manages date/time selection, filtering, and navigation between form elements.
 func (a *App) setUpKeybindingLogEvent() {
-	dds := []*tview.DropDown{
-		a.view.Widgets.LogEvent.StartYear,
-		a.view.Widgets.LogEvent.StartMonth,
-		a.view.Widgets.LogEvent.StartDay,
-		a.view.Widgets.LogEvent.StartHour,
-		a.view.Widgets.LogEvent.StartMinute,
-		a.view.Widgets.LogEvent.EndYear,
-		a.view.Widgets.LogEvent.EndMonth,
-		a.view.Widgets.LogEvent.EndDay,
-		a.view.Widgets.LogEvent.EndHour,
-		a.view.Widgets.LogEvent.EndMinute,
+	w := a.view.Widgets.LogEvent
+	dds := a.timeDropDowns()
+
+	for i, t := range dds {
+		var nextWidget tview.Primitive = w.FilterPattern
+		if i < len(dds)-1 {
+			nextWidget = dds[i+1].dd
+		}
+		t.dd.SetInputCapture(a.dropDownInputCapture(t.dd, nextWidget))
+		t.dd.SetSelectedFunc(a.timeSelected(t.bound, t.field))
 	}
 
-	for i, dd := range dds {
-		currentD := dd
-		currentL := currentD.GetLabel()
-
-		var nextWidget tview.Primitive
-		if i == len(dds)-1 {
-			nextWidget = a.view.Widgets.LogEvent.FilterPatern
-		} else {
-			nextWidget = dds[i+1]
-		}
-		currentD.
-			SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-				switch event.Rune() {
-				case 'k':
-					// up
-					max := currentD.GetOptionCount()
-					idx, _ := currentD.GetCurrentOption()
-					if idx >= 1 {
-						currentD.SetCurrentOption((idx - 1) % max)
-					}
-
-				case 'j':
-					// down
-					max := currentD.GetOptionCount()
-					idx, _ := currentD.GetCurrentOption()
-					if idx < max-1 {
-						currentD.SetCurrentOption((idx + 1) % max)
-					}
-				}
-
-				if event.Key() == tcell.KeyEsc {
-					a.view.Pages.SwitchToPage(view.PageNames[view.LogGroupAndStreamPage])
-					a.tvApp.SetFocus(a.view.Widgets.LogStream.Table)
-				} else if event.Key() == tcell.KeyTab {
-					a.tvApp.SetFocus(nextWidget)
-				} else if event.Key() == tcell.KeyEnter {
-					if currentD.IsOpen() {
-						if i, _ := currentD.GetCurrentOption(); i != -1 {
-							a.LoadLogEvents()
-						}
-					}
-				}
-				return event
-			})
-
-		switch currentL {
-		case view.WidgetNames[view.StartMonthDropDown]:
-			currentD.SetSelectedFunc(func(text string, index int) {
-				a.state.LogEvent.SetTime(currentL, text)
-
-				a.view.Widgets.LogEvent.StartDay.
-					SetOptions(getDaysByMonth(text), nil).
-					SetSelectedFunc(func(text string, index int) {
-						a.state.LogEvent.SetTime(view.WidgetNames[view.StartDayDropDown], text)
-					})
-			})
-		case view.WidgetNames[view.EndMonthDropDown]:
-			currentD.SetSelectedFunc(func(text string, index int) {
-				a.state.LogEvent.SetTime(currentL, text)
-
-				a.view.Widgets.LogEvent.EndDay.
-					SetOptions(getDaysByMonth(text), nil).
-					SetSelectedFunc(func(text string, index int) {
-						a.state.LogEvent.SetTime(view.WidgetNames[view.EndDayDropDown], text)
-					})
-			})
-		default:
-			currentD.SetSelectedFunc(func(text string, index int) {
-				a.state.LogEvent.SetTime(currentL, text)
-			})
-		}
-	}
-
-	a.view.Widgets.LogEvent.FilterPatern.
+	w.FilterPattern.
 		SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyTab {
-				a.tvApp.SetFocus(a.view.Widgets.LogEvent.OutputFile)
+			switch key {
+			case tcell.KeyEnter:
+				a.LoadLogEvents()
+			case tcell.KeyTab:
+				a.tvApp.SetFocus(w.OutputFile)
 			}
 		}).
 		SetChangedFunc(func(text string) {
-			a.state.LogEvent.SetFilterPatern(text)
-			a.LoadLogEvents()
+			a.state.LogEvent.SetFilterPattern(text)
 		})
 
-	a.view.Widgets.LogEvent.OutputFile.
+	w.OutputFile.
 		SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyTab {
-				a.tvApp.SetFocus(a.view.Widgets.LogEvent.SaveEventLog)
+				a.tvApp.SetFocus(w.SaveEventLog)
 			}
 		}).
 		SetChangedFunc(func(text string) {
 			a.state.LogEvent.SetOutputFile(text)
 		})
 
-	saveButton := a.view.Widgets.LogEvent.SaveEventLog
-	saveButton.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	w.SaveEventLog.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			a.tvApp.SetFocus(a.view.Widgets.LogEvent.Back)
+			a.tvApp.SetFocus(w.Back)
+			return nil
 		}
 		return event
 	})
-	saveButton.SetSelectedFunc(func() {
-		a.SaveLogEvents()
-	})
+	w.SaveEventLog.SetSelectedFunc(a.SaveLogEvents)
 
-	backButton := a.view.Widgets.LogEvent.Back
-	backButton.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	w.Back.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			a.tvApp.SetFocus(a.view.Widgets.LogEvent.ViewLog)
+			a.tvApp.SetFocus(w.ViewLog)
+			return nil
 		}
 		return event
 	})
-	backButton.SetSelectedFunc(func() {
-		a.view.Pages.SwitchToPage(view.PageNames[view.LogGroupAndStreamPage])
-		a.tvApp.SetFocus(a.view.Widgets.LogStream.Table)
-	})
+	w.Back.SetSelectedFunc(a.showLogGroupPage)
 
-	viewLog := a.view.Widgets.LogEvent.ViewLog
-	viewLog.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	w.ViewLog.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			a.tvApp.SetFocus(a.view.Widgets.LogEvent.StartYear)
+			a.tvApp.SetFocus(w.StartYear)
+			return nil
 		}
 		return event
 	})
-	viewLog.SetScrollable(true)
 }
 
-// PrintStructFields returns a string slice containing field names and values of a struct.
-// It uses reflection to inspect the struct and format each field as "Name: Value".
-func PrintStructFields(s any) []string {
-	typ := reflect.TypeOf(s)
-	val := reflect.ValueOf(s)
+// dropDownInputCapture handles keys on a time drop-down. While the list is
+// open, tview handles the keys itself (Enter selects, Esc closes) and j/k are
+// mapped to Down/Up. While it is closed, j/k change the option directly, Tab
+// moves to nextWidget and Esc goes back to the log group page.
+func (a *App) dropDownInputCapture(dd *tview.DropDown, nextWidget tview.Primitive) func(*tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		isRune := func(r rune) bool { return event.Key() == tcell.KeyRune && event.Rune() == r }
 
-	if typ.Kind() != reflect.Struct {
-		return []string{"Provided data is not a struct."}
-	}
+		if dd.IsOpen() {
+			switch {
+			case isRune('j'):
+				return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+			case isRune('k'):
+				return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+			}
+			return event
+		}
 
-	list := make([]string, typ.NumField())
-	for i := 0; i < typ.NumField(); i++ {
-		list[i] = fmt.Sprintf("%s: %v", typ.Field(i).Name, val.Field(i))
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			a.showLogGroupPage()
+		case event.Key() == tcell.KeyTab:
+			a.tvApp.SetFocus(nextWidget)
+		case isRune('j'):
+			moveOption(dd, 1)
+		case isRune('k'):
+			moveOption(dd, -1)
+		default:
+			return event
+		}
+		return nil
 	}
-	return list
 }
 
-// getDaysByMonth returns a string slice containing all valid days for a given month.
-// It calculates the correct number of days considering the month and year (2024).
-func getDaysByMonth(month string) []string {
-	var days []string
-	y := 2024
-	intMonth, err := strconv.Atoi(month)
-	if err != nil {
-		log.Fatalf("unable to convert month to integer, %v", err)
+func moveOption(dd *tview.DropDown, delta int) {
+	idx, _ := dd.GetCurrentOption()
+	if next := idx + delta; next >= 0 && next < dd.GetOptionCount() {
+		dd.SetCurrentOption(next)
 	}
-	m := time.Month(intMonth)
+}
 
-	// Start from the first day of the month
-	startDate := time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
-	// Get the number of days in the month
-	for d := startDate; d.Month() == m; d = d.AddDate(0, 0, 1) {
-		// Convert day to a string without leading zero
-		dayStr := strconv.Itoa(d.Day())
-		days = append(days, dayStr)
+// timeSelected returns the selected handler of the drop-down for field f of
+// bound b. It runs after tview has applied the new option, so the reload
+// uses the new value.
+func (a *App) timeSelected(b state.Bound, f state.TimeField) func(string, int) {
+	return func(text string, index int) {
+		if index < 0 {
+			return
+		}
+		v, err := strconv.Atoi(text)
+		if err != nil {
+			log.Printf("unexpected drop-down option %q: %v", text, err)
+			return
+		}
+		a.state.LogEvent.SetTime(b, f, v)
+		if f == state.Year || f == state.Month {
+			a.syncDayDropDown(b)
+		}
+		if !a.syncingWidgets {
+			a.LoadLogEvents()
+		}
 	}
-	return days
+}
+
+// syncDayDropDown offers the days of the selected month and selects the
+// state's day, which SetTime has already clamped to that month.
+func (a *App) syncDayDropDown(b state.Bound) {
+	dd := a.dayDropDown(b)
+	t := a.state.LogEvent.Time(b)
+	if days := state.DaysIn(t.Year, t.Month); dd.GetOptionCount() != days {
+		dd.SetOptions(view.NumberOptions(1, days), a.timeSelected(b, state.Day))
+	}
+	a.selectOptionQuietly(dd, state.Day, t.Day)
+}
+
+// optionIndex returns the index of value v in the drop-down for field f, or
+// -1 when v is not offered. Every time drop-down lists consecutive numbers in
+// ascending order, so the index follows from the first option.
+func (a *App) optionIndex(dd *tview.DropDown, f state.TimeField, v int) int {
+	first := 0
+	switch f {
+	case state.Year:
+		first = a.firstYear
+	case state.Month, state.Day:
+		first = 1
+	}
+	if i := v - first; i >= 0 && i < dd.GetOptionCount() {
+		return i
+	}
+	return -1
+}
+
+// selectOptionQuietly selects value v without reloading log events.
+func (a *App) selectOptionQuietly(dd *tview.DropDown, f state.TimeField, v int) {
+	prev := a.syncingWidgets
+	a.syncingWidgets = true
+	defer func() { a.syncingWidgets = prev }()
+
+	dd.SetCurrentOption(a.optionIndex(dd, f, v))
+}
+
+// setDefaultDropDownLogEvents shows the state's time range in the drop-downs.
+func (a *App) setDefaultDropDownLogEvents() {
+	w := a.view.Widgets.LogEvent
+	currentYear := time.Now().Year()
+	a.firstYear = currentYear - yearsShown + 1
+	years := view.NumberOptions(a.firstYear, currentYear)
+	w.StartYear.SetOptions(years, a.timeSelected(state.Start, state.Year))
+	w.EndYear.SetOptions(years, a.timeSelected(state.End, state.Year))
+
+	for _, t := range a.timeDropDowns() {
+		a.selectOptionQuietly(t.dd, t.field, a.state.LogEvent.Time(t.bound).Get(t.field))
+	}
 }

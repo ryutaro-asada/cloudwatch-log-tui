@@ -23,18 +23,10 @@ type UIState struct {
 }
 
 // New creates a new UIState instance with initialized sub-components.
-// It returns a UIState with empty log collections ready for population.
 func New() *UIState {
 	return &UIState{
-		LogEvent: &LogEvent{
-			enableOutputFile: false,
-			logStreamNames:   make([]string, 0),
-		},
-		LogGroup: &LogGroup{
-			pageTokens: make(map[int]*string),
-		},
-		LogStream: &LogStream{
-			pageTokens: make(map[int]*string),
-		},
+		LogEvent:  &LogEvent{},
+		LogGroup:  &LogGroup{},
+		LogStream: &LogStream{},
 	}
 }
