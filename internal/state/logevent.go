@@ -211,11 +211,17 @@ func (l *LogEvent) ToggleOrder() Order {
 
 // SetDefaultTime sets the time range to the last hour, up to the current minute.
 func (l *LogEvent) SetDefaultTime() {
+	l.SetLast(time.Hour, time.Now())
+}
+
+// SetLast sets the time range to the duration d before now, at minute
+// precision: from the minute of now-d through the whole minute of now.
+func (l *LogEvent) SetLast(d time.Duration, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
-	l.times[Start] = dateTimeOf(now.Add(-1 * time.Hour))
+	now = now.Local()
+	l.times[Start] = dateTimeOf(now.Add(-d))
 	l.times[End] = dateTimeOf(now)
 }
 

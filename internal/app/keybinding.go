@@ -16,6 +16,23 @@ import (
 // year drop-downs.
 const yearsShown = 10
 
+// timePreset sets the time range to the last d when its key is pressed.
+type timePreset struct {
+	key   rune
+	label string
+	d     time.Duration
+}
+
+var timePresets = []timePreset{
+	{'1', "5m", 5 * time.Minute},
+	{'2', "15m", 15 * time.Minute},
+	{'3', "1h", time.Hour},
+	{'4', "3h", 3 * time.Hour},
+	{'5', "12h", 12 * time.Hour},
+	{'6', "1d", 24 * time.Hour},
+	{'7', "7d", 7 * 24 * time.Hour},
+}
+
 // timeDropDown binds a drop-down to the time component it edits.
 type timeDropDown struct {
 	dd    *tview.DropDown
@@ -239,14 +256,24 @@ func (a *App) logEventPageInputCapture(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() != tcell.KeyRune || !a.pageKeysEnabled() {
 		return event
 	}
-	switch event.Rune() {
-	case 'o':
+	if event.Rune() == 'o' {
 		a.state.LogEvent.ToggleOrder()
 		a.LoadLogEvents()
-	default:
-		return event
+		return nil
 	}
-	return nil
+	for _, p := range timePresets {
+		if event.Rune() == p.key {
+			a.applyTimePreset(p.d)
+			return nil
+		}
+	}
+	return event
+}
+
+func (a *App) applyTimePreset(d time.Duration) {
+	a.state.LogEvent.SetLast(d, time.Now())
+	a.setDefaultDropDownLogEvents()
+	a.LoadLogEvents()
 }
 
 func (a *App) pageKeysEnabled() bool {

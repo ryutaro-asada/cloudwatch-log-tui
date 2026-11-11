@@ -582,3 +582,37 @@ func TestNewestFirstFallsBackBefore2024(t *testing.T) {
 		return strings.Contains(h.app.view.Widgets.LogEvent.Hints.GetText(true), "newest first needs")
 	})
 }
+
+func TestTimePresets(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	w := h.app.view.Widgets.LogEvent
+	for _, p := range timePresets {
+		n := len(h.fake.callsOf("FilterLogEvents"))
+		h.typeText(string(p.key))
+		h.waitCalls("FilterLogEvents", n+1)
+		if calls := h.fake.callsOf("FilterLogEvents"); len(calls) != n+1 {
+			t.Fatalf("preset %s: %d FilterLogEvents calls, want exactly 1 more", p.label, len(calls)-n)
+		}
+		body := lastFilterCall(t, h)
+		start, end := msToLocal(body["startTime"]), msToLocal(body["endTime"])
+		if got := end.Sub(start).Round(time.Minute); got != p.d+time.Minute {
+			t.Errorf("preset %s: end - start = %v, want %v plus the end minute", p.label, got, p.d)
+		}
+		if d := time.Since(end); d < -time.Minute || d > time.Minute {
+			t.Errorf("preset %s: end = %v, want about now", p.label, end)
+		}
+		var startText string
+		h.ui(func() {
+			parts := make([]string, 0, 5)
+			for _, dd := range []interface{ GetCurrentOption() (int, string) }{w.StartYear, w.StartMonth, w.StartDay, w.StartHour, w.StartMinute} {
+				_, s := dd.GetCurrentOption()
+				parts = append(parts, s)
+			}
+			startText = strings.Join(parts, " ")
+		})
+		if want := fmt.Sprintf("%d %d %d %d %d", start.Year(), start.Month(), start.Day(), start.Hour(), start.Minute()); startText != want {
+			t.Errorf("preset %s: start drop-downs = %q, want %q", p.label, startText, want)
+		}
+	}
+}

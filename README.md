@@ -88,11 +88,15 @@ Selecting another log group clears the selection.
 | Apply Filter Pattern        | Enter  |
 | Press Button                | Enter  |
 | Toggle newest first / oldest first | o |
+| Show the last 5m / 15m / 1h / 3h / 12h / 1d / 7d | 1 / 2 / 3 / 4 / 5 / 6 / 7 |
 
 Changing a dropdown reloads the events. The filter pattern is applied when you press Enter in the filter field.
 The view shows at most 1000 events: the newest ones, newest at the top, by default, or the oldest ones after pressing `o`.
 The line above the events shows the current order.
-`o` does nothing while you type in a text field or while a dropdown is open.
+The number keys set the start to that long before now and the end to the current minute,
+update the dropdowns and reload the events. Use the dropdowns for any other range.
+`o` and the number keys do nothing while you type in a text field or while a dropdown is open,
+so you can still type a number into an open dropdown to jump to that option.
 
 CloudWatch Logs can return the newest events first only when the start time is on or after 2024-01-01 00:00 UTC.
 For an earlier start time the events are shown oldest first, and the order line says so.

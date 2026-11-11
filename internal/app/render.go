@@ -240,7 +240,11 @@ func (a *App) setHints(requested state.Order, newestFirst bool) {
 	if requested == state.NewestFirst && !newestFirst {
 		order = "[yellow]" + order + "[-]"
 	}
-	a.view.Widgets.LogEvent.Hints.SetText("Order [o]: " + order)
+	var presets strings.Builder
+	for _, p := range timePresets {
+		fmt.Fprintf(&presets, " %c:%s", p.key, p.label)
+	}
+	a.view.Widgets.LogEvent.Hints.SetText("Order (o): " + order + "    Last:" + presets.String())
 }
 
 // initTableRowPosition selects a row after a page was loaded: the first item
