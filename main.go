@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/app"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
@@ -16,44 +18,47 @@ import (
 
 // main initializes the application configuration, sets up AWS client connections,
 // and launches the terminal user interface for browsing CloudWatch logs.
-// It handles graceful shutdown on interrupt signals.
 func main() {
-	// Initialize configuration
+	if err := run(); err != nil {
+		log.Print(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg := config.New()
 
-	// Setup logging
 	logFile, err := cfg.InitLogging()
 	if err != nil {
-		log.Fatalf("error opening log file: %v", err)
+		return fmt.Errorf("error opening log file: %w", err)
 	}
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	// Create context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// Setup signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
-	go func() {
-		<-sigChan
-		cancel()
-	}()
-
-	// Initialize AWS client
 	awsClient, err := aws.NewClient(ctx)
 	if err != nil {
-		log.Fatalf("error initializing AWS client: %v", err)
+		return fmt.Errorf("error initializing AWS client: %w", err)
 	}
 
-	// Create UI
-	app := app.New(ctx, awsClient)
+	tui := app.New(ctx, awsClient)
 
-	go app.LoadLogGroups(state.Home)
+	// tview reads Ctrl-C as a key event, so a signal only arrives from outside
+	// (kill, terminal hangup). Stop the UI so the terminal is restored.
+	go func() {
+		<-ctx.Done()
+		tui.Stop()
+	}()
 
-	// Run the application
-	if err := app.Run(); err != nil {
-		log.Fatalf("error running application: %v", err)
+	tui.LoadLogGroups(state.Home)
+
+	err = tui.Run()
+	stop()
+	if err != nil {
+		return fmt.Errorf("error running application: %w", err)
 	}
+	return nil
 }

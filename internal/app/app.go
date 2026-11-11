@@ -42,6 +42,12 @@ func (a *App) Run() error {
 		Run()
 }
 
+// Stop stops the TUI and restores the terminal. It is safe to call from any
+// goroutine and after Run has returned.
+func (a *App) Stop() {
+	a.tvApp.Stop()
+}
+
 // New creates a new App instance with the provided context and AWS client.
 // It initializes the application state, view components, and key bindings.
 func New(ctx context.Context, awsClient *awsr.Client) *App {

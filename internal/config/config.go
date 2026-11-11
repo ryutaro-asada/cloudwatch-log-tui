@@ -3,28 +3,37 @@
 package config
 
 import (
+	"fmt"
 	"os"
-	// "path/filepath"
+	"path/filepath"
 )
+
+const appName = "cloudwatch-log-tui"
 
 // Config holds the application configuration
 type Config struct {
 	LogFile string
 }
 
-// New creates a new configuration with default values
+// New creates a new configuration with default values.
+// The log file lives in the user cache directory, or the temp directory when
+// no cache directory is available.
 func New() *Config {
-	// homeDir, err := os.UserHomeDir()
-	// if err != nil {
-	// 	homeDir = "."
-	// }
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
 
 	return &Config{
-		LogFile: "cloudwatch-log-tui.log",
+		LogFile: filepath.Join(dir, appName, appName+".log"),
 	}
 }
 
-// InitLogging initializes the application logging
+// InitLogging opens the log file for appending, creating it and its directory
+// if needed. The caller must close the returned file.
 func (c *Config) InitLogging() (*os.File, error) {
-	return os.OpenFile(c.LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
+	if err := os.MkdirAll(filepath.Dir(c.LogFile), 0o700); err != nil {
+		return nil, fmt.Errorf("create log directory: %w", err)
+	}
+	return os.OpenFile(c.LogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 }
