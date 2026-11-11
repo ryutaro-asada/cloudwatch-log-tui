@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
@@ -265,5 +266,102 @@ func assertOnlyFiles(t *testing.T, dir string, names ...string) {
 	}
 	if strings.Join(got, ",") != strings.Join(names, ",") {
 		t.Errorf("files in %s = %v, want %v (temp file left behind?)", dir, got, names)
+	}
+}
+
+func TestLoadOptions(t *testing.T) {
+	tests := []struct {
+		opts              Options
+		profile, region   string
+		wantOptionsLength int
+	}{
+		{Options{}, "", "", 0},
+		{Options{Profile: "p"}, "p", "", 1},
+		{Options{Region: "eu-west-1"}, "", "eu-west-1", 1},
+		{Options{Profile: "p", Region: "eu-west-1"}, "p", "eu-west-1", 2},
+	}
+	for _, tt := range tests {
+		fns := loadOptions(tt.opts)
+		if len(fns) != tt.wantOptionsLength {
+			t.Errorf("%+v: got %d options, want %d", tt.opts, len(fns), tt.wantOptionsLength)
+		}
+		var lo config.LoadOptions
+		for _, fn := range fns {
+			if err := fn(&lo); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if lo.SharedConfigProfile != tt.profile || lo.Region != tt.region {
+			t.Errorf("%+v: profile=%q region=%q, want %q %q", tt.opts, lo.SharedConfigProfile, lo.Region, tt.profile, tt.region)
+		}
+	}
+}
+
+func TestCredentialSource(t *testing.T) {
+	envKeys := config.EnvConfig{Credentials: aws.Credentials{AccessKeyID: "a", SecretAccessKey: "s"}}
+	tests := []struct {
+		name    string
+		profile string
+		sources []any
+		want    string
+	}{
+		{"flag wins over env keys", "p", []any{envKeys}, "p"},
+		{"env keys", "", []any{envKeys, config.SharedConfig{Profile: "x"}}, "env"},
+		{"web identity", "", []any{config.EnvConfig{WebIdentityTokenFilePath: "/t"}}, "env"},
+		{"shared profile", "", []any{config.EnvConfig{SharedConfigProfile: "x"}, config.SharedConfig{Profile: "x"}}, "x"},
+		{"AWS_PROFILE without config file", "", []any{config.EnvConfig{SharedConfigProfile: "x"}, config.SharedConfig{}}, "x"},
+		{"nothing set", "", []any{config.EnvConfig{}, config.SharedConfig{}}, "default"},
+	}
+	for _, tt := range tests {
+		if got := credentialSource(tt.profile, tt.sources); got != tt.want {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func isolateAWSEnv(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, k := range []string{"AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE", "AWS_DEFAULT_PROFILE",
+		"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_WEB_IDENTITY_TOKEN_FILE"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(dir, "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(dir, "credentials"))
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	return dir
+}
+
+func TestNewClientRegionAndProfile(t *testing.T) {
+	dir := isolateAWSEnv(t)
+	cfg := "[default]\n[profile p]\nregion = ap-northeast-1\n"
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	if _, err := NewClient(ctx, Options{}); err == nil || !strings.Contains(err.Error(), "no AWS region") {
+		t.Errorf("without a region: err = %v, want a missing region error", err)
+	}
+
+	c, err := NewClient(ctx, Options{Profile: "p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Profile() != "p" || c.Region() != "ap-northeast-1" {
+		t.Errorf("--profile p: profile=%q region=%q", c.Profile(), c.Region())
+	}
+
+	t.Setenv("AWS_REGION", "us-west-2")
+	c, err = NewClient(ctx, Options{Region: "eu-west-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Profile() != "default" || c.Region() != "eu-west-1" {
+		t.Errorf("--region eu-west-1: profile=%q region=%q", c.Profile(), c.Region())
+	}
+
+	if _, err := NewClient(ctx, Options{Profile: "missing"}); err == nil {
+		t.Error("unknown profile: want an error")
 	}
 }

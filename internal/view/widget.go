@@ -13,6 +13,8 @@ type Widgets struct {
 	LogGroup  logGroupWidget
 	LogStream logStreamWidget
 	LogEvent  logEventWidget
+	// Header is a one-line area shown above every page.
+	Header *tview.TextView
 	// Status is a one-line message area shown below every page.
 	Status *tview.TextView
 }
@@ -57,6 +59,7 @@ func (w *Widgets) setUp() {
 	w.LogGroup.setUp()
 	w.LogStream.setUp()
 	w.LogEvent.setUp()
+	w.Header = tview.NewTextView().SetDynamicColors(true)
 	w.Status = tview.NewTextView()
 }
 

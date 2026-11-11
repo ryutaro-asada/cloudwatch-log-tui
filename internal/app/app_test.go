@@ -110,7 +110,7 @@ func newHarness(t *testing.T, handler func(*http.Request, string, map[string]any
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	client, err := awsr.NewClient(ctx)
+	client, err := awsr.NewClient(ctx, awsr.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,5 +511,30 @@ func TestSaveReportsPathAndRejectsConcurrentSave(t *testing.T) {
 	})
 	if n := len(h.fake.callsOf("FilterLogEvents")); n != 2 {
 		t.Errorf("FilterLogEvents calls = %d, want 2 (one load, one save)", n)
+	}
+}
+
+func TestHeaderShowsAccount(t *testing.T) {
+	for _, tt := range []struct {
+		name, resp, want string
+	}{
+		{"success", `<GetCallerIdentityResponse><GetCallerIdentityResult><Account>123456789012</Account></GetCallerIdentityResult></GetCallerIdentityResponse>`, "Account: 123456789012"},
+		{"failure", "", "Account: failed to get caller identity"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, func(r *http.Request, op string, body map[string]any) string {
+				if op == "" {
+					return tt.resp
+				}
+				return defaultHandler(r, op, body)
+			})
+			h.ui(h.app.LoadAccount)
+			h.waitFor("account in header", func() bool {
+				return strings.Contains(h.app.view.Widgets.Header.GetText(true), tt.want)
+			})
+			if got := h.app.view.Widgets.Header.GetText(true); !strings.Contains(got, "Profile: env  Region: us-east-1") {
+				t.Errorf("header = %q", got)
+			}
+		})
 	}
 }

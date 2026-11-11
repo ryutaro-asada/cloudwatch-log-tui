@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 const (
@@ -38,7 +39,17 @@ var logGroupNamePatternRegexp = regexp.MustCompile(`^[\.\-_/#A-Za-z0-9]*$`)
 
 // Client represents a CloudWatch Logs client
 type Client struct {
-	cwl *cwl.Client
+	cwl     *cwl.Client
+	sts     *sts.Client
+	profile string
+	region  string
+}
+
+// Options selects the AWS profile and region. Empty fields fall back to the
+// SDK defaults (environment variables and shared config files).
+type Options struct {
+	Profile string
+	Region  string
 }
 
 // LogGroupInput holds the parameters for GetLogGroups.
@@ -86,17 +97,84 @@ type LogEventOutput struct {
 	NextToken *string
 }
 
-// NewClient creates a new CloudWatch Logs client using the default AWS configuration.
-// It loads AWS credentials and region from the environment or AWS config files.
-func NewClient(ctx context.Context) (*Client, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
+// NewClient creates a new CloudWatch Logs client. Credentials and region come
+// from opts when set, otherwise from the environment or AWS config files.
+// It returns an error when no region is configured.
+func NewClient(ctx context.Context, opts Options) (*Client, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, loadOptions(opts)...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load AWS config: %w", err)
 	}
+	if cfg.Region == "" {
+		return nil, errors.New("no AWS region configured: use --region, set AWS_REGION, or set region in the AWS profile")
+	}
 
 	return &Client{
-		cwl: cwl.NewFromConfig(cfg),
+		cwl:     cwl.NewFromConfig(cfg),
+		sts:     sts.NewFromConfig(cfg),
+		profile: credentialSource(opts.Profile, cfg.ConfigSources),
+		region:  cfg.Region,
 	}, nil
+}
+
+func loadOptions(opts Options) []func(*config.LoadOptions) error {
+	var fns []func(*config.LoadOptions) error
+	if opts.Profile != "" {
+		fns = append(fns, config.WithSharedConfigProfile(opts.Profile))
+	}
+	if opts.Region != "" {
+		fns = append(fns, config.WithRegion(opts.Region))
+	}
+	return fns
+}
+
+// credentialSource names where the credentials come from, following the
+// precedence of the SDK's credential chain: an explicit profile, then
+// credentials in environment variables ("env"), then the profile from
+// AWS_PROFILE or "default".
+func credentialSource(profile string, sources []any) string {
+	if profile != "" {
+		return profile
+	}
+	var envProfile, sharedProfile string
+	for _, s := range sources {
+		switch c := s.(type) {
+		case config.EnvConfig:
+			if c.Credentials.HasKeys() || c.WebIdentityTokenFilePath != "" {
+				return "env"
+			}
+			envProfile = c.SharedConfigProfile
+		case config.SharedConfig:
+			sharedProfile = c.Profile
+		}
+	}
+	switch {
+	case sharedProfile != "":
+		return sharedProfile
+	case envProfile != "":
+		return envProfile
+	}
+	return "default"
+}
+
+// Profile returns the profile the credentials come from, or "env" for
+// credentials in environment variables.
+func (c *Client) Profile() string {
+	return c.profile
+}
+
+// Region returns the AWS region of the client.
+func (c *Client) Region() string {
+	return c.region
+}
+
+// AccountID returns the AWS account ID of the credentials.
+func (c *Client) AccountID(ctx context.Context) (string, error) {
+	res, err := c.sts.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get caller identity: %w", err)
+	}
+	return aws.ToString(res.Account), nil
 }
 
 // ValidateLogGroupNamePattern reports whether pattern is accepted as

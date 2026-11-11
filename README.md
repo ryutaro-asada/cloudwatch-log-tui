@@ -38,9 +38,19 @@ To run the application:
 
 ```bash
 cloudwatch-log-tui
+cloudwatch-log-tui --profile my-profile --region ap-northeast-1
 ```
 
-AWS credentials and region are read from the usual environment variables and AWS config files.
+| Flag        | Description |
+|-------------|-------------|
+| `--profile` | AWS shared config profile. Default: `AWS_PROFILE`, or the `default` profile |
+| `--region`  | AWS region. Default: `AWS_REGION`, or the region of the profile |
+
+Without the flags, AWS credentials and region are read from the usual environment variables and AWS config files.
+The application exits with an error if no region is configured.
+
+The header line shows the profile (`env` when the credentials come from environment variables), the region,
+and the account ID from `sts:GetCallerIdentity`. If the account ID cannot be fetched, the error is shown in its place.
 
 ### ⌨️ Keybindings
 
