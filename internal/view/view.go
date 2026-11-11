@@ -2,9 +2,12 @@
 // It provides the structure and organization of pages, layouts, and widgets.
 package view
 
+import "github.com/rivo/tview"
+
 // View represents the main view structure containing all UI components.
-// It serves as the root container for pages, layouts, and widgets.
 type View struct {
+	// Root holds the pages above the status line and is the application root.
+	Root    *tview.Flex
 	Pages   *Pages
 	Layouts *Layouts
 	Widgets *Widgets
@@ -21,5 +24,8 @@ func New() *View {
 	v.Widgets.setUp()
 	v.Layouts.setUp(v.Widgets)
 	v.Pages.setUp(v.Layouts)
+	v.Root = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(v.Pages, 0, 1, true).
+		AddItem(v.Widgets.Status, 1, 0, false)
 	return v
 }

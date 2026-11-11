@@ -4,24 +4,16 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"slices"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	awsr "github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/state"
 	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
-)
-
-// Constants and enum types
-const (
-	NoShortcut rune = 0
-	NextPage        = "NextPage ..."
-	PrevPage        = "... PrevPage"
 )
 
 // App represents the main UI application
@@ -31,15 +23,73 @@ type App struct {
 	state     *state.UIState
 	awsClient *awsr.Client
 	ctx       context.Context
+
+	// The fields below are only accessed on the tview event goroutine
+	// (input handlers and QueueUpdateDraw callbacks), so they need no lock.
+	logGroupReq  request
+	logStreamReq request
+	logEventReq  request
+	// logGroups and logStreams hold the page currently shown in each table.
+	logGroups         []cwlTypes.LogGroup
+	logGroupsFiltered bool
+	logStreams        []cwlTypes.LogStream
+	saving            bool
+	// firstYear is the first option of the year drop-downs.
+	firstYear int
+	// syncingWidgets is set while the app itself changes drop-down options,
+	// so the selected handlers do not reload events once per drop-down.
+	syncingWidgets bool
+}
+
+// request tracks the latest request of one kind. Starting a new request
+// cancels the previous one, and finish reports whether a response still
+// belongs to the latest request, so responses that arrive out of order are
+// dropped.
+type request struct {
+	gen    uint64
+	cancel context.CancelFunc
+}
+
+func (r *request) start(parent context.Context) (context.Context, uint64) {
+	r.abort()
+	ctx, cancel := context.WithCancel(parent)
+	r.cancel = cancel
+	return ctx, r.gen
+}
+
+// abort cancels the in-flight request, if any, and invalidates its response.
+func (r *request) abort() {
+	if r.cancel != nil {
+		r.cancel()
+		r.cancel = nil
+	}
+	r.gen++
+}
+
+func (r *request) finish(gen uint64) bool {
+	if gen != r.gen {
+		return false
+	}
+	if r.cancel != nil {
+		r.cancel()
+		r.cancel = nil
+	}
+	return true
 }
 
 // Run starts the TUI application and runs the main event loop.
 // It returns an error if the application fails to start or encounters a fatal error.
 func (a *App) Run() error {
-	return a.tvApp.SetRoot(a.view.Pages, true).
+	return a.tvApp.SetRoot(a.view.Root, true).
 		EnableMouse(true).
 		SetFocus(a.view.Widgets.LogGroup.Table).
 		Run()
+}
+
+// Stop stops the TUI and restores the terminal. It is safe to call from any
+// goroutine and after Run has returned.
+func (a *App) Stop() {
+	a.tvApp.Stop()
 }
 
 // New creates a new App instance with the provided context and AWS client.
@@ -56,335 +106,158 @@ func New(ctx context.Context, awsClient *awsr.Client) *App {
 	return app
 }
 
-// LoadLogGroups fetches log groups from AWS CloudWatch based on the navigation direction.
-// It runs asynchronously and updates the UI when the data is loaded.
+func (a *App) showError(err error) {
+	log.Print(err)
+	a.view.Widgets.Status.SetTextColor(tcell.ColorRed).SetText("Error: " + err.Error())
+}
+
+func (a *App) showInfo(msg string) {
+	a.view.Widgets.Status.SetTextColor(tcell.ColorDefault).SetText(msg)
+}
+
+func (a *App) clearStatus() {
+	a.view.Widgets.Status.SetText("")
+}
+
+// LoadLogGroups fetches the page of log groups in direction direct and shows
+// it in the log group table. It must be called on the event goroutine, or
+// before Run.
 func (a *App) LoadLogGroups(direct state.Direction) {
+	input := &awsr.LogGroupInput{}
+	page, ok := a.state.LogGroup.BeforeGet(input, direct)
+	if !ok {
+		return
+	}
+	if err := awsr.ValidateLogGroupNamePattern(input.FilterPattern); err != nil {
+		a.logGroupReq.abort()
+		a.showError(err)
+		return
+	}
+	ctx, gen := a.logGroupReq.start(a.ctx)
+	input.Ctx = ctx
+
 	go func() {
-		input := &awsr.LogGroupInput{
-			Ctx: a.ctx,
-		}
-		a.state.LogGroup.BeforeGet(input, direct)
 		output, err := a.awsClient.GetLogGroups(input)
-		if err != nil {
-			log.Fatalf("unable to list tables, %v", err)
-		}
-		a.state.LogGroup.AfterGet(output, direct)
-
 		a.tvApp.QueueUpdateDraw(func() {
-			a.setLogGroupToGui(output)
+			if !a.logGroupReq.finish(gen) {
+				return
+			}
+			if err != nil {
+				a.showError(fmt.Errorf("unable to list log groups: %w", err))
+				return
+			}
+			a.clearStatus()
 			table := a.view.Widgets.LogGroup.Table
+			if !a.state.LogGroup.AfterGet(page, output) {
+				a.setLogGroupToGui()
+				table.Select(table.GetRowCount()-1, 0)
+				return
+			}
+			a.logGroups = output.LogGroups
+			a.logGroupsFiltered = input.FilterPattern != ""
+			a.setLogGroupToGui()
 			a.initTableRowPosition(table, direct)
 		})
 	}()
 }
 
-// LoadLogStreams fetches log streams for the selected log group based on the navigation direction.
-// It runs asynchronously and updates the UI when the data is loaded.
+// LoadLogStreams fetches the page of log streams in direction direct for the
+// selected log group. It must be called on the event goroutine.
 func (a *App) LoadLogStreams(direct state.Direction) {
-	go func() {
-		input := &awsr.LogStreamInput{
-			Ctx: a.ctx,
-		}
-		a.state.LogStream.BeforeGet(input, direct)
-		output, err := a.awsClient.GetLogStreams(input)
-		if err != nil {
-			log.Fatalf("unable to list tables, %v", err)
-		}
-		a.state.LogStream.AfterGet(output, direct)
+	input := &awsr.LogStreamInput{}
+	page, ok := a.state.LogStream.BeforeGet(input, direct)
+	if !ok {
+		return
+	}
+	ctx, gen := a.logStreamReq.start(a.ctx)
+	input.Ctx = ctx
 
+	go func() {
+		output, err := a.awsClient.GetLogStreams(input)
 		a.tvApp.QueueUpdateDraw(func() {
-			a.setLogStreamToGui(output)
+			if !a.logStreamReq.finish(gen) {
+				return
+			}
+			if err != nil {
+				a.showError(fmt.Errorf("unable to list log streams: %w", err))
+				return
+			}
+			a.clearStatus()
 			table := a.view.Widgets.LogStream.Table
+			if !a.state.LogStream.AfterGet(page, output) {
+				a.setLogStreamToGui()
+				table.Select(table.GetRowCount()-1, 0)
+				return
+			}
+			a.logStreams = output.LogStreams
+			a.setLogStreamToGui()
 			a.initTableRowPosition(table, direct)
 		})
 	}()
 }
 
-// LoadLogEvents fetches log events from the selected log streams within the specified time range.
-// It displays the events in the log viewer and runs asynchronously.
+// LoadLogEvents fetches up to awsr.MaxLogEvents log events for the current
+// query and shows them in the log viewer. It must be called on the event
+// goroutine.
 func (a *App) LoadLogEvents() {
 	textView := a.view.Widgets.LogEvent.ViewLog
 	textView.Clear()
-	fmt.Fprintln(textView, "Now Loading... ")
-	go func() {
-		input := &awsr.LogEventInput{
-			Ctx: a.ctx,
-		}
-		a.state.LogEvent.BeforeGet(input)
-		output, err := a.awsClient.GetLogEvents(input)
-		if err != nil {
-			log.Fatalf("unnable to write logs, %v", err)
-		}
 
+	input := &awsr.LogEventInput{}
+	if err := a.state.LogEvent.BeforeGet(input); err != nil {
+		a.logEventReq.abort()
+		log.Print(err)
+		fmt.Fprintf(textView, "Error: %v\n", err)
+		return
+	}
+	ctx, gen := a.logEventReq.start(a.ctx)
+	input.Ctx = ctx
+	fmt.Fprintln(textView, "Now Loading... ")
+
+	go func() {
+		output, err := a.awsClient.GetLogEvents(input)
 		a.tvApp.QueueUpdateDraw(func() {
-			a.setLogEventToGui(output)
+			if !a.logEventReq.finish(gen) {
+				return
+			}
+			if err != nil {
+				log.Print(err)
+				textView.Clear()
+				writeQuery(textView, input)
+				fmt.Fprintf(textView, "Error: %v\n", err)
+				return
+			}
+			a.setLogEventToGui(input, output)
 		})
 	}()
 }
 
-func (a *App) setDefaultDropDownLogEvents() {
-	_, startMonth, startDay, startHour, startMinute := a.state.LogEvent.GetStartTime()
-	a.view.Widgets.LogEvent.StartYear.
-		SetCurrentOption(0)
-	a.view.Widgets.LogEvent.StartMonth.
-		SetCurrentOption(startMonth - 1)
-	a.view.Widgets.LogEvent.StartDay.
-		SetCurrentOption(startDay - 1)
-	a.view.Widgets.LogEvent.StartHour.
-		SetCurrentOption(startHour)
-	a.view.Widgets.LogEvent.StartMinute.
-		SetCurrentOption(startMinute)
-
-	_, endMonth, endDay, endHour, endMinute := a.state.LogEvent.GetEndTime()
-	a.view.Widgets.LogEvent.EndYear.
-		SetCurrentOption(0)
-	a.view.Widgets.LogEvent.EndMonth.
-		SetCurrentOption(endMonth - 1)
-	a.view.Widgets.LogEvent.EndDay.
-		SetCurrentOption(endDay - 1)
-	a.view.Widgets.LogEvent.EndHour.
-		SetCurrentOption(endHour)
-	a.view.Widgets.LogEvent.EndMinute.
-		SetCurrentOption(endMinute)
-}
-
-// setLogGroupToGui sets the log group data to the GUI
-func (a *App) setLogGroupToGui(aw *awsr.LogGroupOutput) {
-	lgTable := a.view.Widgets.LogGroup.Table
-	lgTable.Clear()
-
-	headers := []string{
-		"Name",
-		"RetentionDays",
-		"StoredBytes",
-	}
-
-	row := 0
-	for i, header := range headers {
-		lgTable.SetCell(row, i, &tview.TableCell{
-			Text:            header,
-			NotSelectable:   true,
-			Align:           tview.AlignLeft,
-			Color:           tcell.ColorWhite,
-			BackgroundColor: tcell.ColorDefault,
-			Attributes:      tcell.AttrBold,
-		})
-	}
-	row++
-
-	if a.state.LogGroup.HasPrev() {
-		lgTable.SetCell(row, 0, tview.NewTableCell(PrevPage).
-			SetTextColor(tcell.ColorLightSalmon).
-			SetMaxWidth(1).
-			SetExpansion(7))
-		row++
-	}
-
-	for _, lg := range aw.LogGroups {
-		lgName := aws.ToString(lg.LogGroupName)
-		// int32 to string
-		retentionDays := fmt.Sprintf("%d", aws.ToInt32(lg.RetentionInDays))
-		storedBytes := fmt.Sprintf("%d", aws.ToInt64(lg.StoredBytes))
-
-		lgTable.SetCell(row, 0, tview.NewTableCell(lgName).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(7))
-
-		lgTable.SetCell(row, 1, tview.NewTableCell(retentionDays).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(1))
-
-		lgTable.SetCell(row, 2, tview.NewTableCell(storedBytes).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(1))
-
-		row++
-	}
-
-	if a.state.LogGroup.HasNext() {
-		lgTable.SetCell(row, 0, tview.NewTableCell(NextPage).
-			SetTextColor(tcell.ColorLightSteelBlue).
-			SetMaxWidth(1).
-			SetExpansion(7))
-	}
-}
-
-func (a *App) setLogStreamToGui(aw *awsr.LogStreamOutput) {
-	lsTable := a.view.Widgets.LogStream.Table
-	lsTable.Clear()
-
-	headers := []string{
-		"Selected",
-		"Name",
-		"LastEventTime",
-		"FirstEventTime",
-	}
-
-	row := 0
-	for i, header := range headers {
-		lsTable.SetCell(row, i, &tview.TableCell{
-			Text:            header,
-			NotSelectable:   true,
-			Align:           tview.AlignLeft,
-			Color:           tcell.ColorWhite,
-			BackgroundColor: tcell.ColorDefault,
-			Attributes:      tcell.AttrBold,
-		})
-	}
-	row++
-
-	if a.state.LogStream.HasPrev() {
-		lsTable.SetCell(row, 0, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(1))
-		lsTable.SetCell(row, 1, tview.NewTableCell(PrevPage).
-			SetTextColor(tcell.ColorLightSalmon).
-			SetMaxWidth(1).
-			SetExpansion(7))
-		lsTable.SetCell(row, 2, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-
-		lsTable.SetCell(row, 3, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-		row++
-	}
-
-	lsTable.SetCell(row, 0, tview.NewTableCell("").
-		SetTextColor(tcell.ColorLightGreen).
-		SetMaxWidth(1).
-		SetExpansion(1))
-
-	lsTable.SetCell(row, 1, tview.NewTableCell("All Log Streams").
-		SetTextColor(tcell.ColorLightGreen).
-		SetMaxWidth(1).
-		SetExpansion(10))
-
-	lsTable.SetCell(row, 2, tview.NewTableCell("").
-		SetTextColor(tcell.ColorLightGreen).
-		SetMaxWidth(1).
-		SetExpansion(2))
-
-	lsTable.SetCell(row, 3, tview.NewTableCell("").
-		SetTextColor(tcell.ColorLightGreen).
-		SetMaxWidth(1).
-		SetExpansion(2))
-
-	row++
-
-	for _, ls := range aw.LogStreams {
-		lsName := aws.ToString(ls.LogStreamName)
-		lastEventTime := time.UnixMilli(aws.ToInt64(ls.LastEventTimestamp)).Local().Format("2006-01-02 15:04:05")
-		firstEventTime := time.UnixMilli(aws.ToInt64(ls.FirstEventTimestamp)).Local().Format("2006-01-02 15:04:05")
-		selectedMark := ""
-
-		if slices.Contains(a.state.LogEvent.GetLogStreamsSelected(), lsName) {
-			selectedMark = "x"
-		}
-
-		lsTable.SetCell(row, 0, tview.NewTableCell(selectedMark).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(1))
-
-		lsTable.SetCell(row, 1, tview.NewTableCell(lsName).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(10))
-
-		lsTable.SetCell(row, 2, tview.NewTableCell(lastEventTime).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-
-		lsTable.SetCell(row, 3, tview.NewTableCell(firstEventTime).
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-
-		row++
-
-	}
-
-	if a.state.LogStream.HasNext() {
-		lsTable.SetCell(row, 0, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(1))
-
-		lsTable.SetCell(row, 1, tview.NewTableCell(NextPage).
-			SetTextColor(tcell.ColorLightSteelBlue).
-			SetMaxWidth(1).
-			SetExpansion(7))
-
-		lsTable.SetCell(row, 2, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-
-		lsTable.SetCell(row, 3, tview.NewTableCell("").
-			SetTextColor(tcell.ColorLightGreen).
-			SetMaxWidth(1).
-			SetExpansion(2))
-	}
-}
-
-func (a *App) setLogEventToGui(output *awsr.LogEventOutput) {
-	textView := a.view.Widgets.LogEvent.ViewLog
-	textView.Clear()
-	a.state.LogEvent.Print(textView)
-
-	if len(output.LogEvents) == 0 {
-		fmt.Fprintf(textView, "no events\n")
+// SaveLogEvents writes all log events of the current query to the output
+// file in the background and reports the result in the status line.
+// It must be called on the event goroutine.
+func (a *App) SaveLogEvents() {
+	if a.saving {
+		a.showError(errors.New("a save is already running"))
 		return
 	}
-
-	for _, event := range output.LogEvents {
-		fmt.Fprintf(textView, "%s", aws.ToString(event.Message))
+	input := &awsr.LogEventInput{Ctx: a.ctx}
+	if err := a.state.LogEvent.BeforeGet(input); err != nil {
+		a.showError(err)
+		return
 	}
-}
+	a.saving = true
+	a.showInfo("Saving log events...")
 
-// initTableRowPosition sets the initial row selection position in a table
-// based on the navigation direction (Next, Prev, or Home).
-func (a *App) initTableRowPosition(table *tview.Table, direct state.Direction) {
-	var selectRow int
-	switch direct {
-	case state.Next:
-		selectRow = 2
-	case state.Prev:
-		selectRow = table.GetRowCount() - 2
-	case state.Home:
-		selectRow = 1
-	}
-
-	table.Select(selectRow, 0)
-}
-
-// SaveLogEvents writes the log events to a file based on the current query parameters.
-// It runs asynchronously and displays a completion message when finished.
-func (a *App) SaveLogEvents() {
-	textView := a.view.Widgets.LogEvent.ViewLog
-	textView.Clear()
-	fmt.Fprintln(textView, "Now Loading... ")
 	go func() {
-		input := &awsr.LogEventInput{
-			Ctx: a.ctx,
-		}
-		a.state.LogEvent.BeforeGet(input)
-		err := a.awsClient.WriteLogEvents(input)
-		if err != nil {
-			log.Fatalf("unnable to write logs, %v", err)
-		}
+		path, count, err := a.awsClient.WriteLogEvents(input)
 		a.tvApp.QueueUpdateDraw(func() {
-			textView.Clear()
-			fmt.Fprintln(textView, "Finished writing log events.")
+			a.saving = false
+			if err != nil {
+				a.showError(fmt.Errorf("unable to save log events to %s: %w", path, err))
+				return
+			}
+			log.Printf("saved %d log events to %s", count, path)
+			a.showInfo(fmt.Sprintf("Saved %d log events to %s", count, path))
 		})
 	}()
 }

@@ -2,116 +2,170 @@
 package state
 
 import (
+	"errors"
 	"fmt"
-	"log"
-	"strconv"
+	"slices"
 	"sync"
 	"time"
 
-	"github.com/rivo/tview"
 	awsr "github.com/ryutaro-asada/cloudwatch-log-tui/internal/aws"
-	"github.com/ryutaro-asada/cloudwatch-log-tui/internal/view"
 )
+
+// Bound selects the start or the end of the log event time range.
+type Bound int
+
+const (
+	// Start is the beginning of the time range.
+	Start Bound = iota
+	// End is the end of the time range. The whole end minute is included.
+	End
+)
+
+// TimeField is one component of a DateTime.
+type TimeField int
+
+const (
+	// Year is the DateTime year.
+	Year TimeField = iota
+	// Month is the DateTime month (1-12).
+	Month
+	// Day is the DateTime day of month (1-31).
+	Day
+	// Hour is the DateTime hour (0-23).
+	Hour
+	// Minute is the DateTime minute (0-59).
+	Minute
+)
+
+// DateTime is a local date and time with minute precision.
+type DateTime struct {
+	Year, Month, Day, Hour, Minute int
+}
+
+// Get returns the value of field f.
+func (d DateTime) Get(f TimeField) int {
+	switch f {
+	case Year:
+		return d.Year
+	case Month:
+		return d.Month
+	case Day:
+		return d.Day
+	case Hour:
+		return d.Hour
+	default:
+		return d.Minute
+	}
+}
+
+func (d *DateTime) set(f TimeField, v int) {
+	switch f {
+	case Year:
+		d.Year = v
+	case Month:
+		d.Month = v
+	case Day:
+		d.Day = v
+	case Hour:
+		d.Hour = v
+	case Minute:
+		d.Minute = v
+	}
+}
+
+func (d DateTime) time() time.Time {
+	return time.Date(d.Year, time.Month(d.Month), d.Day, d.Hour, d.Minute, 0, 0, time.Local)
+}
+
+func (d DateTime) validate() error {
+	switch {
+	case d.Year < 1:
+		return fmt.Errorf("invalid year %d", d.Year)
+	case d.Month < 1 || d.Month > 12:
+		return fmt.Errorf("invalid month %d", d.Month)
+	case d.Day < 1 || d.Day > DaysIn(d.Year, d.Month):
+		return fmt.Errorf("invalid date %04d-%02d-%02d", d.Year, d.Month, d.Day)
+	case d.Hour < 0 || d.Hour > 23:
+		return fmt.Errorf("invalid hour %d", d.Hour)
+	case d.Minute < 0 || d.Minute > 59:
+		return fmt.Errorf("invalid minute %d", d.Minute)
+	}
+	return nil
+}
+
+func dateTimeOf(t time.Time) DateTime {
+	return DateTime{t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute()}
+}
+
+// DaysIn returns the number of days in the given month (1-12) of year.
+func DaysIn(year, month int) int {
+	return time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+}
 
 // LogEvent manages the state for CloudWatch log events,
 // including time range, selected streams, filtering options, and output settings.
 type LogEvent struct {
-	startYear          int
-	startMonth         int
-	startDay           int
-	startHour          int
-	startMinute        int
-	endYear            int
-	endMonth           int
-	endDay             int
-	endHour            int
-	endMinute          int
-	logGroupName       string
-	logStreamNames     []string
-	filterPatern       string
-	enableFilterPatern bool
-	outputFile         string
-	enableOutputFile   bool
-	mu                 sync.RWMutex
+	mu             sync.RWMutex
+	times          [2]DateTime
+	logGroupName   string
+	logStreamNames []string
+	filterPattern  string
+	outputFile     string
 }
 
-// SetLogGroupSelected updates the currently selected log group name
-// from which log events will be fetched.
+// SetLogGroupSelected updates the log group from which log events will be
+// fetched. Selecting a different group clears the selected log streams, which
+// belong to the previous group.
 func (l *LogEvent) SetLogGroupSelected(logGroupName string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.logGroupName = logGroupName
+	if l.logGroupName != logGroupName {
+		l.logGroupName = logGroupName
+		l.logStreamNames = nil
+	}
 }
 
-// GetLogStreamsSelected returns the list of currently selected log stream names.
+// GetLogStreamsSelected returns a copy of the selected log stream names.
 func (l *LogEvent) GetLogStreamsSelected() []string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	return l.logStreamNames
+	return slices.Clone(l.logStreamNames)
 }
 
-// GetStartTime returns the start time components (year, month, day, hour, minute)
-// for the log event time range.
-func (l *LogEvent) GetStartTime() (int, int, int, int, int) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+// ClearLogStreams deselects all log streams, so events of every stream in the
+// log group are fetched.
+func (l *LogEvent) ClearLogStreams() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	return l.startYear, l.startMonth, l.startDay, l.startHour, l.startMinute
+	l.logStreamNames = nil
 }
 
-// GetEndTime returns the end time components (year, month, day, hour, minute)
-// for the log event time range.
-func (l *LogEvent) GetEndTime() (int, int, int, int, int) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+// AddLogStream adds a log stream to the selection. Adding a stream that is
+// already selected does nothing. It returns an error when the selection is
+// full (FilterLogEvents accepts at most awsr.MaxLogStreamNames streams).
+func (l *LogEvent) AddLogStream(name string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	return l.endYear, l.endMonth, l.endDay, l.endHour, l.endMinute
-}
-
-// GetCurrntState returns a copy of the current LogEvent state.
-// Note: This function name contains a typo (should be GetCurrentState).
-func (l *LogEvent) GetCurrntState() LogEvent {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	return LogEvent{
-		startYear:          l.startYear,
-		startMonth:         l.startMonth,
-		startDay:           l.startDay,
-		startHour:          l.startHour,
-		startMinute:        l.startMinute,
-		endYear:            l.endYear,
-		endMonth:           l.endMonth,
-		endDay:             l.endDay,
-		endHour:            l.endHour,
-		endMinute:          l.endMinute,
-		logGroupName:       l.logGroupName,
-		logStreamNames:     l.logStreamNames,
-		filterPatern:       l.filterPatern,
-		enableFilterPatern: l.enableFilterPatern,
-		outputFile:         l.outputFile,
-		enableOutputFile:   l.enableOutputFile,
+	if slices.Contains(l.logStreamNames, name) {
+		return nil
 	}
+	if len(l.logStreamNames) >= awsr.MaxLogStreamNames {
+		return fmt.Errorf("at most %d log streams can be selected", awsr.MaxLogStreamNames)
+	}
+	l.logStreamNames = append(l.logStreamNames, name)
+	return nil
 }
 
-// SetLogStreamsSelected updates the list of selected log streams
-// from which log events will be fetched.
-func (l *LogEvent) SetLogStreamsSelected(logStreamNames []string) {
+// SetFilterPattern updates the filter pattern used to search log events.
+func (l *LogEvent) SetFilterPattern(filterPattern string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.logStreamNames = logStreamNames
-}
-
-// SetFilterPatern updates the filter pattern used to search log events.
-// Note: This function name contains a typo (should be SetFilterPattern).
-func (l *LogEvent) SetFilterPatern(filterPatern string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.filterPatern = filterPatern
+	l.filterPattern = filterPattern
 }
 
 // SetOutputFile sets the output file path where log events will be saved.
@@ -122,136 +176,73 @@ func (l *LogEvent) SetOutputFile(outputFile string) {
 	l.outputFile = outputFile
 }
 
-// SetDefaultTime sets the time range to default values:
-// start time is one hour before current time, end time is current time.
+// SetDefaultTime sets the time range to the last hour, up to the current minute.
 func (l *LogEvent) SetDefaultTime() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := time.Now()
-	oneHourBefore := now.Add(-1 * time.Hour)
-
-	l.startYear = oneHourBefore.Year()
-	l.startMonth = int(oneHourBefore.Month())
-	l.startDay = oneHourBefore.Day()
-	l.startHour = oneHourBefore.Hour()
-	l.startMinute = oneHourBefore.Minute()
-
-	l.endYear = now.Year()
-	l.endMonth = int(now.Month())
-	l.endDay = now.Day()
-	l.endHour = now.Hour()
-	l.endMinute = now.Minute()
+	l.times[Start] = dateTimeOf(now.Add(-1 * time.Hour))
+	l.times[End] = dateTimeOf(now)
 }
 
-// BeforeGet prepares the input parameters before fetching log events.
-// It validates the state and sets all necessary query parameters.
-func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	if l.isInValid() {
-		log.Fatalf("invalid log event state")
-	}
-
-	input.LogGroupName = l.logGroupName
-	input.LogStreamNames = l.logStreamNames
-	input.FilterPattern = l.filterPatern
-	input.StartTime = time.Date(l.startYear, time.Month(l.startMonth), l.startDay, l.startHour, l.startMinute, 0, 0, time.Local)
-	input.EndTime = time.Date(l.endYear, time.Month(l.endMonth), l.endDay, l.endHour, l.endMinute, 0, 0, time.Local)
-}
-
-// isInValid checks if the LogEvent state has invalid or missing required fields.
-// Returns true if any time component is zero or log group name is empty.
-func (l *LogEvent) isInValid() bool {
+// Time returns the start or end of the time range.
+func (l *LogEvent) Time(b Bound) DateTime {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	if l.logGroupName == "" {
-		return true
-	}
-	return l.startYear == 0 ||
-		l.startMonth == 0 ||
-		l.startDay == 0 ||
-		l.startHour == 0 ||
-		l.startMinute == 0 ||
-		l.endYear == 0 ||
-		l.endMonth == 0 ||
-		l.endDay == 0 ||
-		l.endHour == 0 ||
-		l.endMinute == 0
+	return l.times[b]
 }
 
-// SetTime updates a specific time component based on the widget label.
-// It converts the text value to integer and updates the corresponding field.
-func (l *LogEvent) SetTime(label string, text string) {
+// SetTime updates one component of the start or end time. When the year or
+// month changes, the day is clamped to the length of the new month so it never
+// rolls over into the next month.
+func (l *LogEvent) SetTime(b Bound, f TimeField, v int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	switch label {
-	case view.WidgetNames[view.StartYearDropDown]:
-		l.startYear = string2int(text)
-	case view.WidgetNames[view.StartMonthDropDown]:
-		l.startMonth = string2int(text)
-	case view.WidgetNames[view.StartDayDropDown]:
-		l.startDay = string2int(text)
-	case view.WidgetNames[view.StartHourDropDown]:
-		l.startHour = string2int(text)
-	case view.WidgetNames[view.StartMinuteDropDown]:
-		l.startMinute = string2int(text)
-	case view.WidgetNames[view.EndYearDropDown]:
-		l.endYear = string2int(text)
-	case view.WidgetNames[view.EndMonthDropDown]:
-		l.endMonth = string2int(text)
-	case view.WidgetNames[view.EndDayDropDown]:
-		l.endDay = string2int(text)
-	case view.WidgetNames[view.EndHourDropDown]:
-		l.endHour = string2int(text)
-	case view.WidgetNames[view.EndMinuteDropDown]:
-		l.endMinute = string2int(text)
+	t := &l.times[b]
+	t.set(f, v)
+	if f == Year || f == Month {
+		if t.Month >= 1 && t.Month <= 12 {
+			t.Day = min(t.Day, DaysIn(t.Year, t.Month))
+		}
 	}
 }
 
-// string2int converts a string to integer.
-// It terminates the program if conversion fails.
-func string2int(s string) int {
-	i, err := strconv.Atoi(s)
-	if err != nil {
-		log.Fatalf("unable to list tables, %v", err)
+// BeforeGet fills input with the current query parameters. It returns an
+// error, and leaves input unusable, when the state cannot form a valid query.
+func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) error {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	if err := l.validate(); err != nil {
+		return err
 	}
-	return i
+
+	input.LogGroupName = l.logGroupName
+	input.LogStreamNames = slices.Clone(l.logStreamNames)
+	input.FilterPattern = l.filterPattern
+	input.OutputFile = l.outputFile
+	input.StartTime = l.times[Start].time()
+	input.EndTime = l.times[End].time().Add(time.Minute - time.Millisecond)
+	return nil
 }
 
-// Print displays the current log event settings in the provided text view.
-// It shows log group, streams, filter pattern, time range, and other query parameters.
-func (l *LogEvent) Print(textView *tview.TextView) {
-	fmt.Fprintf(textView, "------------------------------------- \n")
-	fmt.Fprintf(textView, "[YOUR SETTING]\n")
-	fmt.Fprintf(textView, "LogGroup: %s\n", l.logGroupName)
-	if len(l.logStreamNames) == 0 {
-		fmt.Fprintf(textView, "LogStreams: %s\n", "ALL")
-	} else {
-		fmt.Fprintf(textView, "LogStreams: %s\n", l.logStreamNames)
+// validate must be called with l.mu held.
+func (l *LogEvent) validate() error {
+	if l.logGroupName == "" {
+		return errors.New("no log group selected")
 	}
-	fmt.Fprintf(textView, "LogStreams: %s\n", l.logStreamNames)
-	fmt.Fprintf(textView, "FilterPaterm: %s\n", l.filterPatern)
-
-	fmt.Fprintf(textView, "%s/%s/%s %s:%s\n",
-		strconv.Itoa(l.startYear),
-		strconv.Itoa(l.startMonth),
-		strconv.Itoa(l.startDay),
-		strconv.Itoa(l.startHour),
-		strconv.Itoa(l.startMinute),
-	)
-	fmt.Fprintf(textView, "    ~     \n")
-	fmt.Fprintf(textView, "%s/%s/%s %s:%s\n",
-		strconv.Itoa(l.endYear),
-		strconv.Itoa(l.endMonth),
-		strconv.Itoa(l.endDay),
-		strconv.Itoa(l.endHour),
-		strconv.Itoa(l.endMinute),
-	)
-
-	fmt.Fprintf(textView, "MaxEvent: %s\n", "1000")
-	fmt.Fprintf(textView, "You can get all log events by pressing 'Save Button'.\n")
-	fmt.Fprintf(textView, "------------------------------------- \n")
+	if err := l.times[Start].validate(); err != nil {
+		return fmt.Errorf("start time: %w", err)
+	}
+	if err := l.times[End].validate(); err != nil {
+		return fmt.Errorf("end time: %w", err)
+	}
+	if start, end := l.times[Start].time(), l.times[End].time(); start.After(end) {
+		return fmt.Errorf("start time %s is after end time %s",
+			start.Format("2006-01-02 15:04"), end.Format("2006-01-02 15:04"))
+	}
+	return nil
 }

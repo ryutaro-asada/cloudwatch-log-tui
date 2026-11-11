@@ -3,9 +3,14 @@
 package aws
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,25 +19,44 @@ import (
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
-// MaxItemsInLayout defines the maximum number of items to display per page in the UI layout.
-const MaxItemsInLayout int32 = 50
+const (
+	// MaxItemsInLayout defines the maximum number of items to display per page in the UI layout.
+	MaxItemsInLayout int32 = 50
+	// MaxLogEvents is the maximum number of events GetLogEvents returns.
+	MaxLogEvents = 1000
+	// MaxLogStreamNames is the FilterLogEvents limit for logStreamNames.
+	MaxLogStreamNames = 100
+	// DefaultOutputFile is the file WriteLogEvents writes to when no file is given.
+	DefaultOutputFile = "output.txt"
+
+	maxLogGroupNamePatternLength = 512
+)
+
+// See LogGroupNamePattern in
+// https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_DescribeLogGroups.html
+var logGroupNamePatternRegexp = regexp.MustCompile(`^[\.\-_/#A-Za-z0-9]*$`)
 
 // Client represents a CloudWatch Logs client
 type Client struct {
 	cwl *cwl.Client
 }
 
-// Input types for log groups, streams, and events
+// LogGroupInput holds the parameters for GetLogGroups.
 type LogGroupInput struct {
 	FilterPattern string
 	NextToken     *string
 	Ctx           context.Context
 }
+
+// LogStreamInput holds the parameters for GetLogStreams.
 type LogStreamInput struct {
-	LogGroupName  string
-	NextToken     *string
-	Ctx           context.Context
+	LogGroupName string
+	NextToken    *string
+	Ctx          context.Context
 }
+
+// LogEventInput holds the parameters for GetLogEvents and WriteLogEvents.
+// EndTime is inclusive.
 type LogEventInput struct {
 	LogGroupName   string
 	LogStreamNames []string
@@ -43,34 +67,23 @@ type LogEventInput struct {
 	Ctx            context.Context
 }
 
-// Output types for log groups, streams, and events
+// LogGroupOutput holds one page of log groups.
 type LogGroupOutput struct {
 	LogGroups []cwlTypes.LogGroup
 	NextToken *string
 }
+
+// LogStreamOutput holds one page of log streams.
 type LogStreamOutput struct {
 	LogStreams []cwlTypes.LogStream
 	NextToken  *string
 }
+
+// LogEventOutput holds the events returned by GetLogEvents. NextToken is set
+// when more events exist than were returned.
 type LogEventOutput struct {
 	LogEvents []cwlTypes.FilteredLogEvent
 	NextToken *string
-}
-
-// SetLogStreamOutput creates a LogStreamOutput from provided log stream names and event timestamps.
-// This is used to construct mock or cached log stream data for the UI.
-func (c *Client) SetLogStreamOutput(lsNames []string, lsLastEvent []string, lsFirstEvent []string) *LogStreamOutput {
-	lsOutput := &LogStreamOutput{}
-	for i := 0; i < len(lsNames); i++ {
-		ls := cwlTypes.LogStream{
-			LogStreamName:       aws.String(lsNames[i]),
-			LastEventTimestamp:  aws.Int64(time.Now().Unix()),
-			LastIngestionTime:   aws.Int64(time.Now().Unix()),
-			FirstEventTimestamp: aws.Int64(time.Now().Unix()),
-		}
-		lsOutput.LogStreams = append(lsOutput.LogStreams, ls)
-	}
-	return lsOutput
 }
 
 // NewClient creates a new CloudWatch Logs client using the default AWS configuration.
@@ -86,33 +99,57 @@ func NewClient(ctx context.Context) (*Client, error) {
 	}, nil
 }
 
-// GetLogGroups retrieves log groups from CloudWatch Logs with optional filtering.
-// It supports pagination through the NextToken parameter.
-func (c *Client) GetLogGroups(input *LogGroupInput) (*LogGroupOutput, error) {
-	params := &cwl.DescribeLogGroupsInput{
-		Limit: aws.Int32(MaxItemsInLayout),
+// ValidateLogGroupNamePattern reports whether pattern is accepted as
+// DescribeLogGroups' LogGroupNamePattern.
+func ValidateLogGroupNamePattern(pattern string) error {
+	if len(pattern) > maxLogGroupNamePatternLength {
+		return fmt.Errorf("search word is longer than %d characters", maxLogGroupNamePatternLength)
 	}
-
-	if input.FilterPattern != "" {
-		params.LogGroupNamePattern = &input.FilterPattern
+	if !logGroupNamePatternRegexp.MatchString(pattern) {
+		return errors.New("search word may contain only A-Z a-z 0-9 . - _ / #")
 	}
-
-	if input.NextToken != nil {
-		params.NextToken = input.NextToken
-	}
-
-	res, err := c.cwl.DescribeLogGroups(input.Ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe log groups: %w", err)
-	}
-
-	return &LogGroupOutput{
-		LogGroups: res.LogGroups,
-		NextToken: res.NextToken,
-	}, nil
+	return nil
 }
 
-// GetLogStreams retrieves log streams for a specified log group.
+// FormatMessage returns an event message as exactly one line terminated by "\n",
+// whether or not the original message ends with a line break.
+func FormatMessage(event cwlTypes.FilteredLogEvent) string {
+	return strings.TrimRight(aws.ToString(event.Message), "\r\n") + "\n"
+}
+
+// GetLogGroups retrieves one page of log groups with optional filtering.
+// It supports pagination through the NextToken parameter.
+func (c *Client) GetLogGroups(input *LogGroupInput) (*LogGroupOutput, error) {
+	if err := ValidateLogGroupNamePattern(input.FilterPattern); err != nil {
+		return nil, err
+	}
+	params := &cwl.DescribeLogGroupsInput{
+		Limit:     aws.Int32(MaxItemsInLayout),
+		NextToken: input.NextToken,
+	}
+	if input.FilterPattern != "" {
+		params.LogGroupNamePattern = aws.String(input.FilterPattern)
+	}
+
+	for {
+		res, err := c.cwl.DescribeLogGroups(input.Ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe log groups: %w", err)
+		}
+		// With LogGroupNamePattern a page can be empty while more pages
+		// follow; skip such pages so the UI never shows an empty page with a
+		// "next" link.
+		if len(res.LogGroups) > 0 || !hasNewToken(params.NextToken, res.NextToken) {
+			return &LogGroupOutput{
+				LogGroups: res.LogGroups,
+				NextToken: res.NextToken,
+			}, nil
+		}
+		params.NextToken = res.NextToken
+	}
+}
+
+// GetLogStreams retrieves one page of log streams for a log group.
 // Results are ordered by last event time in descending order and support pagination.
 func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) {
 	params := &cwl.DescribeLogStreamsInput{
@@ -120,94 +157,123 @@ func (c *Client) GetLogStreams(input *LogStreamInput) (*LogStreamOutput, error) 
 		Limit:        aws.Int32(MaxItemsInLayout),
 		OrderBy:      cwlTypes.OrderByLastEventTime,
 		Descending:   aws.Bool(true),
+		NextToken:    input.NextToken,
 	}
 
-	if input.NextToken != nil {
-		params.NextToken = input.NextToken
+	for {
+		res, err := c.cwl.DescribeLogStreams(input.Ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe log streams: %w", err)
+		}
+		if len(res.LogStreams) > 0 || !hasNewToken(params.NextToken, res.NextToken) {
+			return &LogStreamOutput{
+				LogStreams: res.LogStreams,
+				NextToken:  res.NextToken,
+			}, nil
+		}
+		params.NextToken = res.NextToken
 	}
-
-	res, err := c.cwl.DescribeLogStreams(input.Ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe log streams: %w", err)
-	}
-	return &LogStreamOutput{
-		LogStreams: res.LogStreams,
-		NextToken:  res.NextToken,
-	}, nil
 }
 
-// GetLogEvents retrieves log events within the specified time range and filters.
+// GetLogEvents retrieves up to MaxLogEvents log events within the time range.
 // It can filter by multiple log streams and supports pattern-based filtering.
 func (c *Client) GetLogEvents(input *LogEventInput) (*LogEventOutput, error) {
-	params := &cwl.FilterLogEventsInput{
-		LogGroupName: aws.String(input.LogGroupName),
-		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
-		EndTime:      aws.Int64(input.EndTime.UnixMilli()),
-		Limit:        aws.Int32(1000),
-	}
-	if len(input.LogStreamNames) > 0 {
-		params.LogStreamNames = input.LogStreamNames
-	}
+	params := filterLogEventsParams(input)
+	out := &LogEventOutput{}
 
-	if input.FilterPattern != "" {
-		params.FilterPattern = &input.FilterPattern
+	// A FilterLogEvents page can be partially filled or empty while more
+	// events exist, so keep paging until the limit is reached.
+	for {
+		params.Limit = aws.Int32(int32(MaxLogEvents - len(out.LogEvents)))
+		res, err := c.cwl.FilterLogEvents(input.Ctx, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to filter log events: %w", err)
+		}
+		out.LogEvents = append(out.LogEvents, res.Events...)
+		if !hasNewToken(params.NextToken, res.NextToken) {
+			return out, nil
+		}
+		if len(out.LogEvents) >= MaxLogEvents {
+			out.NextToken = res.NextToken
+			return out, nil
+		}
+		params.NextToken = res.NextToken
 	}
-
-	res, err := c.cwl.FilterLogEvents(input.Ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe log events: %w", err)
-	}
-	return &LogEventOutput{
-		LogEvents: res.Events,
-		NextToken: res.NextToken,
-	}, nil
 }
 
-// WriteLogEvents fetches all log events matching the criteria and writes them to a file.
-// It uses pagination to retrieve all events without memory limitations.
-func (c *Client) WriteLogEvents(input *LogEventInput) error {
-	params := &cwl.FilterLogEventsInput{
-		LogGroupName: aws.String(input.LogGroupName),
-		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
-		EndTime:      aws.Int64(input.EndTime.UnixMilli()),
+// WriteLogEvents fetches all log events matching the input and writes them to
+// input.OutputFile (DefaultOutputFile when empty), one event per line.
+// It returns the absolute path written and the number of events.
+// The file is replaced only when every event was written; on error an
+// existing file is left untouched.
+func (c *Client) WriteLogEvents(input *LogEventInput) (path string, count int, err error) {
+	outputFile := input.OutputFile
+	if outputFile == "" {
+		outputFile = DefaultOutputFile
 	}
-	if len(input.LogStreamNames) > 0 {
-		params.LogStreamNames = input.LogStreamNames
-	}
-
-	if input.FilterPattern != "" {
-		params.FilterPattern = &input.FilterPattern
-	}
-
-	outputFile := "output.txt"
-	if input.OutputFile != "" {
-		outputFile = input.OutputFile
-	}
-
-	// Create and overwrite the output file
-	file, err := os.Create(outputFile)
+	path, err = filepath.Abs(outputFile)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %v", err)
+		return "", 0, fmt.Errorf("failed to resolve output file: %w", err)
 	}
-	defer file.Close()
 
-	paginator := cwl.NewFilterLogEventsPaginator(c.cwl, params, func(o *cwl.FilterLogEventsPaginatorOptions) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return path, 0, fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+		}
+	}()
+
+	w := bufio.NewWriter(tmp)
+	paginator := cwl.NewFilterLogEventsPaginator(c.cwl, filterLogEventsParams(input), func(o *cwl.FilterLogEventsPaginatorOptions) {
 		o.Limit = 10000
 	})
-
 	for paginator.HasMorePages() {
 		res, err := paginator.NextPage(input.Ctx)
 		if err != nil {
-			return fmt.Errorf("unable to get log events: %v", err)
+			return path, count, fmt.Errorf("unable to get log events: %w", err)
 		}
-
 		for _, event := range res.Events {
-			message := aws.ToString(event.Message)
-			_, err := file.WriteString(message)
-			if err != nil {
-				return fmt.Errorf("failed to write log message: %v", err)
+			if _, err := w.WriteString(FormatMessage(event)); err != nil {
+				return path, count, fmt.Errorf("failed to write log message: %w", err)
 			}
+			count++
 		}
 	}
-	return nil
+
+	if err = w.Flush(); err != nil {
+		return path, count, fmt.Errorf("failed to write log message: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return path, count, fmt.Errorf("failed to close output file: %w", err)
+	}
+	if err = os.Rename(tmp.Name(), path); err != nil {
+		return path, count, fmt.Errorf("failed to replace output file: %w", err)
+	}
+	return path, count, nil
+}
+
+func filterLogEventsParams(input *LogEventInput) *cwl.FilterLogEventsInput {
+	params := &cwl.FilterLogEventsInput{
+		LogGroupName: aws.String(input.LogGroupName),
+		StartTime:    aws.Int64(input.StartTime.UnixMilli()),
+		EndTime:      aws.Int64(input.EndTime.UnixMilli()),
+	}
+	if len(input.LogStreamNames) > 0 {
+		params.LogStreamNames = input.LogStreamNames
+	}
+	if input.FilterPattern != "" {
+		params.FilterPattern = aws.String(input.FilterPattern)
+	}
+	return params
+}
+
+// hasNewToken reports whether next continues a listing that was requested
+// with prev. The SDK paginators also stop on a repeated token, which some
+// services return at the end of a listing.
+func hasNewToken(prev, next *string) bool {
+	return next != nil && *next != "" && (prev == nil || *next != *prev)
 }

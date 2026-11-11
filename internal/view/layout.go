@@ -5,25 +5,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// Layout represents different UI layouts
-type Layout int
-
-const (
-	// LogGroupLayout represents the log group selection layout
-	LogGroupLayout Layout = iota
-	// LogStreamLayout represents the log stream selection layout
-	LogStreamLayout
-	// LogEventLayout represents the log event viewing layout
-	LogEventLayout
-)
-
-// LayoutNames provides string identifiers for each layout type.
-var LayoutNames = map[Layout]string{
-	LogGroupLayout:  "LogGroup",
-	LogStreamLayout: "LogStream",
-	LogEventLayout:  "LogEvent",
-}
-
 // Layouts manages the different layout configurations for the application.
 // It contains the main layouts for log group/stream selection and log event viewing.
 type Layouts struct {
@@ -63,79 +44,79 @@ func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
 		AddItem(w.LogEvent.StartYear,
 			0, 0, // row, column position
 			1, 1, // rowSpan, columnSpan
-			0, 100, // minHeight, minWidth
+			0, 0, // minHeight, minWidth
 			false). // focusable
 		AddItem(w.LogEvent.StartMonth,
 			0, 1,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.StartDay,
 			0, 2,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.StartHour,
 			0, 3,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.StartMinute,
 			0, 4,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		// end date
 		AddItem(w.LogEvent.EndYear,
 			1, 0,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.EndMonth,
 			1, 1,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.EndDay,
 			1, 2,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.EndHour,
 			1, 3,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.EndMinute,
 			1, 4,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		// additional input
-		AddItem(w.LogEvent.FilterPatern,
+		AddItem(w.LogEvent.FilterPattern,
 			2, 0,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.OutputFile,
 			2, 1,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.SaveEventLog,
 			2, 2,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		AddItem(w.LogEvent.Back,
 			2, 3,
 			1, 1,
-			0, 100,
+			0, 0,
 			false).
 		// Log View
 		AddItem(w.LogEvent.ViewLog,
 			3, 0,
 			1, 5,
-			0, 100,
+			0, 0,
 			false)
 }
