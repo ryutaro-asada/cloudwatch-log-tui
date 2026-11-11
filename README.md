@@ -17,7 +17,18 @@ A Command Line Interface (CLI) tool for viewing AWS CloudWatch Logs with a text-
 
 ```bash
 brew tap ryutaro-asada/cloudwatch-log-tui
+brew trust ryutaro-asada/cloudwatch-log-tui
 brew install cloudwatch-log-tui
+```
+
+Recent Homebrew versions refuse to load formulae from non-official taps until they are trusted.
+`brew trust` records this once in `~/.homebrew/trust.json` (or `$XDG_CONFIG_HOME/homebrew/trust.json` if `XDG_CONFIG_HOME` is set).
+To trust only this formula instead of the whole tap, run `brew trust --formula ryutaro-asada/cloudwatch-log-tui/cloudwatch-log-tui`.
+
+To upgrade:
+
+```bash
+brew update && brew upgrade cloudwatch-log-tui
 ```
 
 binary is available at [here](https://github.com/ryutaro-asada/cloudwatch-log-tui/releases)
