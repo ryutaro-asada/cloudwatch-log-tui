@@ -102,6 +102,16 @@ func DaysIn(year, month int) int {
 	return time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
 }
 
+// Order is the order in which log events are shown.
+type Order int
+
+const (
+	// NewestFirst shows the newest events first. It is the default.
+	NewestFirst Order = iota
+	// OldestFirst shows the oldest events first.
+	OldestFirst
+)
+
 // LogEvent manages the state for CloudWatch log events,
 // including time range, selected streams, filtering options, and output settings.
 type LogEvent struct {
@@ -111,6 +121,7 @@ type LogEvent struct {
 	logStreamNames []string
 	filterPattern  string
 	outputFile     string
+	order          Order
 }
 
 // SetLogGroupSelected updates the log group from which log events will be
@@ -176,13 +187,41 @@ func (l *LogEvent) SetOutputFile(outputFile string) {
 	l.outputFile = outputFile
 }
 
-// SetDefaultTime sets the time range to the last hour, up to the current minute.
-func (l *LogEvent) SetDefaultTime() {
+// Order returns the requested event order.
+func (l *LogEvent) Order() Order {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return l.order
+}
+
+// ToggleOrder switches between NewestFirst and OldestFirst and returns the
+// new order.
+func (l *LogEvent) ToggleOrder() Order {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
-	l.times[Start] = dateTimeOf(now.Add(-1 * time.Hour))
+	if l.order == NewestFirst {
+		l.order = OldestFirst
+	} else {
+		l.order = NewestFirst
+	}
+	return l.order
+}
+
+// SetDefaultTime sets the time range to the last hour, up to the current minute.
+func (l *LogEvent) SetDefaultTime() {
+	l.SetLast(time.Hour, time.Now())
+}
+
+// SetLast sets the time range to the duration d before now, at minute
+// precision: from the minute of now-d through the whole minute of now.
+func (l *LogEvent) SetLast(d time.Duration, now time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now = now.Local()
+	l.times[Start] = dateTimeOf(now.Add(-d))
 	l.times[End] = dateTimeOf(now)
 }
 
@@ -212,6 +251,8 @@ func (l *LogEvent) SetTime(b Bound, f TimeField, v int) {
 
 // BeforeGet fills input with the current query parameters. It returns an
 // error, and leaves input unusable, when the state cannot form a valid query.
+// input.NewestFirst is false when NewestFirst is requested but the start time
+// is before awsr.NewestFirstMinStart.
 func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) error {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -226,6 +267,7 @@ func (l *LogEvent) BeforeGet(input *awsr.LogEventInput) error {
 	input.OutputFile = l.outputFile
 	input.StartTime = l.times[Start].time()
 	input.EndTime = l.times[End].time().Add(time.Minute - time.Millisecond)
+	input.NewestFirst = l.order == NewestFirst && awsr.NewestFirstSupported(input.StartTime)
 	return nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/gdamore/tcell/v2"
@@ -119,6 +120,35 @@ func (a *App) clearStatus() {
 	a.view.Widgets.Status.SetText("")
 }
 
+// accountTimeout bounds GetCallerIdentity, including credential resolution,
+// so a stuck credential provider shows an error instead of "loading" forever.
+const accountTimeout = 30 * time.Second
+
+func (a *App) setHeader(account string) {
+	a.view.Widgets.Header.SetText(fmt.Sprintf("Profile: [yellow]%s[-]  Region: [yellow]%s[-]  Account: %s",
+		tview.Escape(a.awsClient.Profile()), tview.Escape(a.awsClient.Region()), account))
+}
+
+// LoadAccount shows the profile and region in the header and fetches the
+// account ID in the background. It must be called on the event goroutine, or
+// before Run.
+func (a *App) LoadAccount() {
+	a.setHeader("loading...")
+	go func() {
+		ctx, cancel := context.WithTimeout(a.ctx, accountTimeout)
+		defer cancel()
+		account, err := a.awsClient.AccountID(ctx)
+		a.tvApp.QueueUpdateDraw(func() {
+			if err != nil {
+				log.Print(err)
+				a.setHeader("[red]" + tview.Escape(err.Error()) + "[-]")
+				return
+			}
+			a.setHeader("[yellow]" + tview.Escape(account) + "[-]")
+		})
+	}()
+}
+
 // LoadLogGroups fetches the page of log groups in direction direct and shows
 // it in the log group table. It must be called on the event goroutine, or
 // before Run.
@@ -204,12 +234,16 @@ func (a *App) LoadLogEvents() {
 	textView.Clear()
 
 	input := &awsr.LogEventInput{}
+	requested := a.state.LogEvent.Order()
 	if err := a.state.LogEvent.BeforeGet(input); err != nil {
 		a.logEventReq.abort()
+		a.setHints(requested, requested == state.NewestFirst)
 		log.Print(err)
 		fmt.Fprintf(textView, "Error: %v\n", err)
 		return
 	}
+	a.setHints(requested, input.NewestFirst)
+	order := orderText(requested, input.NewestFirst)
 	ctx, gen := a.logEventReq.start(a.ctx)
 	input.Ctx = ctx
 	fmt.Fprintln(textView, "Now Loading... ")
@@ -223,11 +257,11 @@ func (a *App) LoadLogEvents() {
 			if err != nil {
 				log.Print(err)
 				textView.Clear()
-				writeQuery(textView, input)
+				writeQuery(textView, input, order)
 				fmt.Fprintf(textView, "Error: %v\n", err)
 				return
 			}
-			a.setLogEventToGui(input, output)
+			a.setLogEventToGui(input, output, order)
 		})
 	}()
 }

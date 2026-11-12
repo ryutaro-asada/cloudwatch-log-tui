@@ -243,3 +243,55 @@ func TestLogStreamGroupChangeResetsPages(t *testing.T) {
 		t.Errorf("Home input = %+v", in)
 	}
 }
+
+func TestBeforeGetOrder(t *testing.T) {
+	end := DateTime{2026, 1, 1, 10, 0}
+	tests := []struct {
+		name   string
+		start  time.Time
+		toggle bool
+		want   bool
+	}{
+		{"newest first by default", time.Date(2025, 6, 1, 0, 0, 0, 0, time.Local), false, true},
+		{"oldest first after toggle", time.Date(2025, 6, 1, 0, 0, 0, 0, time.Local), true, false},
+		{"falls back before 2024 UTC", time.Date(2023, 12, 31, 23, 59, 0, 0, time.UTC), false, false},
+		{"2024-01-01 UTC is supported", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), false, true},
+	}
+	for _, tt := range tests {
+		l := newLogEvent(dateTimeOf(tt.start.Local()), end)
+		if tt.toggle {
+			if got := l.ToggleOrder(); got != OldestFirst {
+				t.Errorf("%s: ToggleOrder = %v, want OldestFirst", tt.name, got)
+			}
+		}
+		var in awsr.LogEventInput
+		if err := l.BeforeGet(&in); err != nil {
+			t.Fatal(err)
+		}
+		if in.NewestFirst != tt.want {
+			t.Errorf("%s: NewestFirst = %v, want %v", tt.name, in.NewestFirst, tt.want)
+		}
+	}
+}
+
+func TestSetLast(t *testing.T) {
+	now := time.Date(2026, 1, 3, 0, 4, 30, 0, time.Local)
+	tests := []struct {
+		d     time.Duration
+		start DateTime
+	}{
+		{5 * time.Minute, DateTime{2026, 1, 2, 23, 59}},
+		{time.Hour, DateTime{2026, 1, 2, 23, 4}},
+		{7 * 24 * time.Hour, DateTime{2025, 12, 27, 0, 4}},
+	}
+	for _, tt := range tests {
+		var l LogEvent
+		l.SetLast(tt.d, now)
+		if got := l.Time(Start); got != tt.start {
+			t.Errorf("SetLast(%v): start = %+v, want %+v", tt.d, got, tt.start)
+		}
+		if got, want := l.Time(End), (DateTime{2026, 1, 3, 0, 4}); got != want {
+			t.Errorf("SetLast(%v): end = %+v, want %+v", tt.d, got, want)
+		}
+	}
+}

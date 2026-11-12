@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -27,6 +28,15 @@ func main() {
 }
 
 func run() error {
+	var opts aws.Options
+	flag.StringVar(&opts.Profile, "profile", "", "AWS shared config profile (default: AWS_PROFILE, or the default profile)")
+	flag.StringVar(&opts.Region, "region", "", "AWS region (default: AWS_REGION, or the region of the profile)")
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [flags]\n\nBrowse AWS CloudWatch Logs in the terminal.\n\nFlags:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
 	cfg := config.New()
 
 	logFile, err := cfg.InitLogging()
@@ -39,7 +49,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	awsClient, err := aws.NewClient(ctx)
+	awsClient, err := aws.NewClient(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("error initializing AWS client: %w", err)
 	}
@@ -53,6 +63,7 @@ func run() error {
 		tui.Stop()
 	}()
 
+	tui.LoadAccount()
 	tui.LoadLogGroups(state.Home)
 
 	err = tui.Run()

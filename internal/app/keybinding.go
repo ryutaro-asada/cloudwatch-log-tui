@@ -16,6 +16,23 @@ import (
 // year drop-downs.
 const yearsShown = 10
 
+// timePreset sets the time range to the last d when its key is pressed.
+type timePreset struct {
+	key   rune
+	label string
+	d     time.Duration
+}
+
+var timePresets = []timePreset{
+	{'1', "5m", 5 * time.Minute},
+	{'2', "15m", 15 * time.Minute},
+	{'3', "1h", time.Hour},
+	{'4', "3h", 3 * time.Hour},
+	{'5', "12h", 12 * time.Hour},
+	{'6', "1d", 24 * time.Hour},
+	{'7', "7d", 7 * 24 * time.Hour},
+}
+
 // timeDropDown binds a drop-down to the time component it edits.
 type timeDropDown struct {
 	dd    *tview.DropDown
@@ -229,6 +246,46 @@ func (a *App) setUpKeybindingLogEvent() {
 		}
 		return event
 	})
+	a.view.Layouts.LogEvent.SetInputCapture(a.logEventPageInputCapture)
+}
+
+// logEventPageInputCapture handles the keys that work anywhere on the log
+// event page. It runs before the focused widget, so it leaves keys alone
+// while the user types in an input field or picks from an open drop-down.
+func (a *App) logEventPageInputCapture(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() != tcell.KeyRune || !a.pageKeysEnabled() {
+		return event
+	}
+	if event.Rune() == 'o' {
+		a.state.LogEvent.ToggleOrder()
+		a.LoadLogEvents()
+		return nil
+	}
+	for _, p := range timePresets {
+		if event.Rune() == p.key {
+			a.applyTimePreset(p.d)
+			return nil
+		}
+	}
+	return event
+}
+
+func (a *App) applyTimePreset(d time.Duration) {
+	a.state.LogEvent.SetLast(d, time.Now())
+	a.setDefaultDropDownLogEvents()
+	a.LoadLogEvents()
+}
+
+func (a *App) pageKeysEnabled() bool {
+	if _, typing := a.tvApp.GetFocus().(*tview.InputField); typing {
+		return false
+	}
+	for _, t := range a.timeDropDowns() {
+		if t.dd.IsOpen() {
+			return false
+		}
+	}
+	return true
 }
 
 // dropDownInputCapture handles keys on a time drop-down. While the list is
