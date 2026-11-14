@@ -110,7 +110,7 @@ func newHarness(t *testing.T, handler func(*http.Request, string, map[string]any
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	client, err := awsr.NewClient(ctx)
+	client, err := awsr.NewClient(ctx, awsr.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,5 +511,108 @@ func TestSaveReportsPathAndRejectsConcurrentSave(t *testing.T) {
 	})
 	if n := len(h.fake.callsOf("FilterLogEvents")); n != 2 {
 		t.Errorf("FilterLogEvents calls = %d, want 2 (one load, one save)", n)
+	}
+}
+
+func TestHeaderShowsAccount(t *testing.T) {
+	for _, tt := range []struct {
+		name, resp, want string
+	}{
+		{"success", `<GetCallerIdentityResponse><GetCallerIdentityResult><Account>123456789012</Account></GetCallerIdentityResult></GetCallerIdentityResponse>`, "Account: 123456789012"},
+		{"failure", "", "Account: failed to get caller identity"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, func(r *http.Request, op string, body map[string]any) string {
+				if op == "" {
+					return tt.resp
+				}
+				return defaultHandler(r, op, body)
+			})
+			h.ui(h.app.LoadAccount)
+			h.waitFor("account in header", func() bool {
+				return strings.Contains(h.app.view.Widgets.Header.GetText(true), tt.want)
+			})
+			if got := h.app.view.Widgets.Header.GetText(true); !strings.Contains(got, "Profile: env  Region: us-east-1") {
+				t.Errorf("header = %q", got)
+			}
+		})
+	}
+}
+
+func TestOrderToggle(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != false {
+		t.Errorf("default startFromHead = %v, want false (newest first)", got)
+	}
+	if !strings.Contains(h.viewLog(), "Order: newest first") {
+		t.Errorf("view does not show the order:\n%s", h.viewLog())
+	}
+
+	n := len(h.fake.callsOf("FilterLogEvents"))
+	h.typeText("o")
+	h.waitCalls("FilterLogEvents", n+1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != nil {
+		t.Errorf("after toggle startFromHead = %v, want unset (oldest first)", got)
+	}
+	h.waitViewLog("Order: oldest first")
+
+	h.ui(func() { h.app.tvApp.SetFocus(h.app.view.Widgets.LogEvent.FilterPattern) })
+	h.typeText("o")
+	h.waitFor("typed filter", func() bool { return h.app.view.Widgets.LogEvent.FilterPattern.GetText() == "o" })
+	if h.app.state.LogEvent.Order() != state.OldestFirst {
+		t.Error("typing o in the filter field toggled the order")
+	}
+}
+
+func TestNewestFirstFallsBackBefore2024(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	n := len(h.fake.callsOf("FilterLogEvents"))
+	h.ui(func() {
+		h.app.state.LogEvent.SetTime(state.Start, state.Year, 2023)
+		h.app.LoadLogEvents()
+	})
+	h.waitCalls("FilterLogEvents", n+1)
+	if got := lastFilterCall(t, h)["startFromHead"]; got != nil {
+		t.Errorf("startFromHead = %v, want unset for a start time before 2024", got)
+	}
+	h.waitViewLog("Order: oldest first (newest first needs a start time on or after 2024-01-01 00:00 UTC)")
+	h.waitFor("fallback hint", func() bool {
+		return strings.Contains(h.app.view.Widgets.LogEvent.Hints.GetText(true), "newest first needs")
+	})
+}
+
+func TestTimePresets(t *testing.T) {
+	h := newHarness(t, defaultHandler)
+	h.openEvents(1, 1)
+	w := h.app.view.Widgets.LogEvent
+	for _, p := range timePresets {
+		n := len(h.fake.callsOf("FilterLogEvents"))
+		h.typeText(string(p.key))
+		h.waitCalls("FilterLogEvents", n+1)
+		if calls := h.fake.callsOf("FilterLogEvents"); len(calls) != n+1 {
+			t.Fatalf("preset %s: %d FilterLogEvents calls, want exactly 1 more", p.label, len(calls)-n)
+		}
+		body := lastFilterCall(t, h)
+		start, end := msToLocal(body["startTime"]), msToLocal(body["endTime"])
+		if got := end.Sub(start).Round(time.Minute); got != p.d+time.Minute {
+			t.Errorf("preset %s: end - start = %v, want %v plus the end minute", p.label, got, p.d)
+		}
+		if d := time.Since(end); d < -time.Minute || d > time.Minute {
+			t.Errorf("preset %s: end = %v, want about now", p.label, end)
+		}
+		var startText string
+		h.ui(func() {
+			parts := make([]string, 0, 5)
+			for _, dd := range []interface{ GetCurrentOption() (int, string) }{w.StartYear, w.StartMonth, w.StartDay, w.StartHour, w.StartMinute} {
+				_, s := dd.GetCurrentOption()
+				parts = append(parts, s)
+			}
+			startText = strings.Join(parts, " ")
+		})
+		if want := fmt.Sprintf("%d %d %d %d %d", start.Year(), start.Month(), start.Day(), start.Hour(), start.Minute()); startText != want {
+			t.Errorf("preset %s: start drop-downs = %q, want %q", p.label, startText, want)
+		}
 	}
 }

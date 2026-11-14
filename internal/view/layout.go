@@ -34,8 +34,8 @@ func (l *Layouts) setUpLayoutLogGroupAndStream(w *Widgets) {
 func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
 	l.LogEvent = tview.NewGrid().
 		SetRows(
-			// drop down options
-			1, 1, 1,
+			// drop down options, hints
+			1, 1, 1, 1,
 			// text view
 			0).
 		SetColumns(0, 0, 0, 0, 0).
@@ -113,9 +113,14 @@ func (l *Layouts) setUpLayoutLogEvent(w *Widgets) {
 			1, 1,
 			0, 0,
 			false).
+		AddItem(w.LogEvent.Hints,
+			3, 0,
+			1, 5,
+			0, 0,
+			false).
 		// Log View
 		AddItem(w.LogEvent.ViewLog,
-			3, 0,
+			4, 0,
 			1, 5,
 			0, 0,
 			false)

@@ -38,9 +38,19 @@ To run the application:
 
 ```bash
 cloudwatch-log-tui
+cloudwatch-log-tui --profile my-profile --region ap-northeast-1
 ```
 
-AWS credentials and region are read from the usual environment variables and AWS config files.
+| Flag        | Description |
+|-------------|-------------|
+| `--profile` | AWS shared config profile. Default: `AWS_PROFILE`, or the `default` profile |
+| `--region`  | AWS region. Default: `AWS_REGION`, or the region of the profile |
+
+Without the flags, AWS credentials and region are read from the usual environment variables and AWS config files.
+The application exits with an error if no region is configured.
+
+The header line shows the profile (`env` when the credentials come from environment variables), the region,
+and the account ID from `sts:GetCallerIdentity`. If the account ID cannot be fetched, the error is shown in its place.
 
 ### ⌨️ Keybindings
 
@@ -77,12 +87,22 @@ Selecting another log group clears the selection.
 | Back to Log Group Panel (from a closed dropdown) | Esc |
 | Apply Filter Pattern        | Enter  |
 | Press Button                | Enter  |
+| Toggle newest first / oldest first | o |
+| Show the last 5m / 15m / 1h / 3h / 12h / 1d / 7d | 1 / 2 / 3 / 4 / 5 / 6 / 7 |
 
 Changing a dropdown reloads the events. The filter pattern is applied when you press Enter in the filter field.
-The view shows at most 1000 events.
+The view shows at most 1000 events: the newest ones, newest at the top, by default, or the oldest ones after pressing `o`.
+The line above the events shows the current order.
+The number keys set the start to that long before now and the end to the current minute,
+update the dropdowns and reload the events. Use the dropdowns for any other range.
+`o` and the number keys do nothing while you type in a text field or while a dropdown is open,
+so you can still type a number into an open dropdown to jump to that option.
+
+CloudWatch Logs can return the newest events first only when the start time is on or after 2024-01-01 00:00 UTC.
+For an earlier start time the events are shown oldest first, and the order line says so.
 
 `Save Button` writes all events of the current query to the file in `Write Output File`
-(default: `output.txt` in the current directory), one event per line.
+(default: `output.txt` in the current directory), one event per line, oldest first regardless of the view order.
 The status line at the bottom shows the absolute path and the number of events when the save is done.
 
 ### 📝 Log file

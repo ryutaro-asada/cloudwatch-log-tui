@@ -6,7 +6,8 @@ import "github.com/rivo/tview"
 
 // View represents the main view structure containing all UI components.
 type View struct {
-	// Root holds the pages above the status line and is the application root.
+	// Root holds the header, the pages and the status line, and is the
+	// application root.
 	Root    *tview.Flex
 	Pages   *Pages
 	Layouts *Layouts
@@ -25,6 +26,7 @@ func New() *View {
 	v.Layouts.setUp(v.Widgets)
 	v.Pages.setUp(v.Layouts)
 	v.Root = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(v.Widgets.Header, 1, 0, false).
 		AddItem(v.Pages, 0, 1, true).
 		AddItem(v.Widgets.Status, 1, 0, false)
 	return v
